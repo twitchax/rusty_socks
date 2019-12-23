@@ -10,5 +10,7 @@ net2 = "0.2.33"
 futures = "0.3.1"
 pnet = "0.23.0"
 toml = "0.5.5"
+log = "0.4.8"
+simple_logger = "1.0.1"
 serde = { version = "1.0.104", features = ["derive"] }
 tokio = { version = "0.2.4", features = ["full"] }

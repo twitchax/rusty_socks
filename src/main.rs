@@ -8,9 +8,10 @@ mod pump;
 mod buffer_pool;
 
 use tokio::net::TcpListener;
-//use tokio::prelude::*;
 use toml::from_str;
 use serde::Deserialize;
+use log::{info, debug, LevelFilter};
+use simple_logger;
 
 use connection::Connection;
 use helpers::Helpers;
@@ -61,17 +62,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         None => "0.0.0.0".to_owned()
     };
 
+    // Set the log level.
+    simple_logger::init().unwrap();
+    log::set_max_level(LevelFilter::Debug);
+
     // Create a buffer pool (doubled so that each half of the connection achieves the desired size).
     let mut pool = BufferPool::new(2 * buffer_size);
 
     // Start the server.
     let mut listener = TcpListener::bind(format!("{}:{}", listen_ip, port)).await?;
-    println!("Listening on tcp://{}:{} ... ", listen_ip, port);
+    info!("Listening on tcp://{}:{} ... ", listen_ip, port);
 
     // Server loop.
     loop {
-        println!("Buffer pool: {} leased / {} total.", pool.leased_count(), pool.total_count());
-        println!("Awaiting new connection ...");
+        debug!("Buffer pool: {} leased / {} total.", pool.leased_count(), pool.total_count());
 
         let (stream, _) = listener.accept().await?;
 
