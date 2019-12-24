@@ -20,10 +20,7 @@ impl Helpers {
     }
 
     pub fn bytes_to_port(data: &[u8]) -> GenericResult<u16> {
-        if data.len() != 2 {
-            return Err(Box::new(GenericError::from("Ports should be exactly two bytes in this context.")));
-        }
-
+        assert!(data.len() == 2);
         return Ok(((data[0] as u16) << 8) + (data[1] as u16));
     }
 
@@ -32,9 +29,7 @@ impl Helpers {
     }
 
     pub fn slice_to_u32(data: &[u8]) -> GenericResult<u32> {
-        if data.len() != 4 {
-            return Err(Box::new(GenericError::from("Slice cannot be converted because it is not of size 4.")));
-        }
+        assert!(data.len() == 4);
 
         return Ok(((data[0] as u32) << 24) +
                   ((data[1] as u32) << 16) +
@@ -43,9 +38,7 @@ impl Helpers {
     }
 
     pub fn slice_to_u128(data: &[u8]) -> GenericResult<u128> {
-        if data.len() != 16 {
-            return Err(Box::new(GenericError::from("Slice cannot be converted because it is not of size 16.")));
-        }
+        assert!(data.len() == 16);
 
         return Ok(((data[0] as u128) << 120) +
                   ((data[1] as u128) << 112) +

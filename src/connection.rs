@@ -19,12 +19,13 @@ pub struct Connection {
     id: String,
     client_socket: TcpStream,
     endpoint_interface: String,
-    buffer: Buffer
+    buffer: Buffer, 
+    read_timeout: u64
 }
 
 impl Connection {
-    pub fn from(stream: TcpStream, endpoint_interface: String, buffer: Buffer) -> Self {
-        return Connection { id: Helpers::get_id().to_owned(), client_socket: stream, endpoint_interface: endpoint_interface, buffer: buffer };
+    pub fn from(stream: TcpStream, endpoint_interface: String, buffer: Buffer, read_timeout: u64) -> Self {
+        return Connection { id: Helpers::get_id().to_owned(), client_socket: stream, endpoint_interface: endpoint_interface, buffer: buffer, read_timeout: read_timeout };
     }
 
     // `self` Connection is moved when the handle method is called, and ownership is given
@@ -44,7 +45,7 @@ impl Connection {
     }
 
     async fn handle_task(mut self) -> GenericResult<()> {
-
+        // Get a &mut slice from the leased buffer.
         let buffer = &mut self.buffer.get().await[..];
 
         // Complete handshake.
@@ -94,7 +95,7 @@ impl Connection {
 
         // Run the pump.
 
-        Pump::from(&mut self.client_socket, &mut endpoint_socket, buffer).start().await?;
+        Pump::from(&mut self.client_socket, &mut endpoint_socket, buffer, self.read_timeout).start().await?;
 
         // Shutdown sockets and ignore result.
 

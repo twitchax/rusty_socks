@@ -22,7 +22,8 @@ struct Config {
     listen_interface: Option<String>,
     endpoint_interface: Option<String>,
     port: Option<u16>,
-    buffer_size: Option<usize>
+    buffer_size: Option<usize>,
+    read_timeout: Option<u64>
 }
 
 #[tokio::main]
@@ -44,12 +45,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut endpoint_interface: Option<String> = None;
     let mut port = 1080u16;
     let mut buffer_size = 8192usize;
+    let mut read_timeout = 5000u64;
     
     if let Some(c) = config {
         listen_interface = c.listen_interface;
         endpoint_interface = c.endpoint_interface;
         port = c.port.unwrap_or(port);
         buffer_size = c.buffer_size.unwrap_or(buffer_size);
+        read_timeout = c.read_timeout.unwrap_or(read_timeout);
     }
 
     let listen_ip = match &listen_interface {
@@ -81,6 +84,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // TODO: Converting endpoint_interface to owned is a cop out.
         // Instead, we could compute the lifetimes correctly...
-        Connection::from(stream, endpoint_ip.to_owned(), pool.lease()).handle();
+        Connection::from(stream, endpoint_ip.to_owned(), pool.lease(), read_timeout).handle();
     }
 }
