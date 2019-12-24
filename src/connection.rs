@@ -7,7 +7,8 @@ use std::iter::IntoIterator;
 use std::str::FromStr;
 use std::net::{SocketAddr, IpAddr, ToSocketAddrs};
 use net2::TcpBuilder;
-use log::{error, info, trace};
+use log::{error, info, debug};
+use phf::{Map, phf_map};
 
 use crate::handshake::Handshake;
 use crate::helpers::{Helpers, GenericResult, GenericError};
@@ -31,7 +32,7 @@ impl Connection {
     // `self` Connection is moved when the handle method is called, and ownership is given
     // fully to the thread, so `this` Connection will drop when the spawned thread ends.
     pub fn handle(self) -> JoinHandle<()> {
-        trace!("[{}] Start.", self.id);
+        debug!("[{}] Start.", self.id);
 
         // Move self into the spawned thread, as well.
         return tokio::spawn(async move {
@@ -53,10 +54,10 @@ impl Connection {
         let handshake = Connection::perform_handshake(&mut self.client_socket, buffer).await?;
         let methods_string = handshake.methods.into_iter().map(|m| m.to_string()).collect::<Vec<String>>().join(",");
 
-        trace!("[{}]   Handshake:", self.id);
-        trace!("[{}]     Version: {}", self.id, handshake.version);
-        trace!("[{}]     Num Methods: {}", self.id, handshake.num_methods);
-        trace!("[{}]     Methods: {}", self.id, methods_string);
+        debug!("[{}]   Handshake:", self.id);
+        debug!("[{}]     Version: {}", self.id, handshake.version);
+        debug!("[{}]     Num Methods: {}", self.id, handshake.num_methods);
+        debug!("[{}]     Methods: {}", self.id, methods_string);
 
         // Get request from client.
 
@@ -67,12 +68,12 @@ impl Connection {
             Destination::Domain(s) => s.to_owned()
         };
 
-        trace!("[{}]   Request:", self.id);
-        trace!("[{}]     Version: {}", self.id, request.version);
-        trace!("[{}]     Command: {}", self.id, request.command);
-        trace!("[{}]     Address Type: {}", self.id, request.address_type);
-        trace!("[{}]     Destination: {}", self.id, destination);
-        trace!("[{}]     Port: {}", self.id, request.port);
+        debug!("[{}]   Request:", self.id);
+        debug!("[{}]     Version: {}", self.id, request.version);
+        debug!("[{}]     Command: {}", self.id, COMMANDS[&request.command]);
+        debug!("[{}]     Address Type: {}", self.id, ADDRESS_TYPES[&request.address_type]);
+        debug!("[{}]     Destination: {}", self.id, destination);
+        debug!("[{}]     Port: {}", self.id, request.port);
 
         // Perform requested action.
 
@@ -102,7 +103,7 @@ impl Connection {
         self.client_socket.shutdown(Shutdown::Both).unwrap_or(());
         endpoint_socket.shutdown(Shutdown::Both).unwrap_or(());
 
-        trace!("[{}] End.", self.id);
+        debug!("[{}] End.", self.id);
 
         return Ok(());
     }
@@ -222,10 +223,31 @@ impl Connection {
         // In a failure scenario, ensure the SOCKS process does not continue.
 
         if error != 0 {
-            let err_string = format!("The connection failed gracefully with `{}`.", error);
+            let err_string = format!("The connection to `{}` failed gracefully with `{}`.", string_to_connect, ERRORS[&reply_field]);
             return Err(Box::new(GenericError::from(err_string)) as Box<dyn std::error::Error> /* hack */);
         }
 
         return Ok(endpoint_socket.unwrap());
     }
 }
+
+static COMMANDS: Map<u8, &'static str> = phf_map! {
+    1u8 => "Connect",
+    2u8 => "Bind",
+    3u8 => "UDP Associate",
+};
+
+static ADDRESS_TYPES: Map<u8, &'static str> = phf_map! {
+    1u8 => "Ipv4",
+    3u8 => "Domain",
+    4u8 => "Ipv6",
+};
+
+static ERRORS: Map<u8, &'static str> = phf_map! {
+    0u8 => "Succeeded",
+    1u8 => "General SOCKS Server Failure",
+    3u8 => "Network Unreachable",
+    4u8 => "Host Unreachable",
+    5u8 => "Connection Refused",
+    6u8 => "TTL Expired"
+};

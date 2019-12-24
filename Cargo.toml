@@ -12,5 +12,6 @@ pnet = "0.23.0"
 toml = "0.5.5"
 log = "0.4.8"
 simple_logger = "1.0.1"
+phf = { version = "0.8.0", features = ["macros"] }
 serde = { version = "1.0.104", features = ["derive"] }
 tokio = { version = "0.2.4", features = ["full"] }

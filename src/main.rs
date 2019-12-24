@@ -67,7 +67,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Set the log level.
     simple_logger::init().unwrap();
-    log::set_max_level(LevelFilter::Debug);
+    log::set_max_level(LevelFilter::Info);
 
     // Create a buffer pool (doubled so that each half of the connection achieves the desired size).
     let mut pool = BufferPool::new(2 * buffer_size);

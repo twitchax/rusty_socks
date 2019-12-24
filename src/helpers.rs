@@ -20,7 +20,7 @@ impl Helpers {
     }
 
     pub fn bytes_to_port(data: &[u8]) -> GenericResult<u16> {
-        assert!(data.len() == 2);
+        assert!(data.len() == 2, "There must be exactly two (2) bytes for a conversion to a port.");
         return Ok(((data[0] as u16) << 8) + (data[1] as u16));
     }
 
@@ -29,7 +29,7 @@ impl Helpers {
     }
 
     pub fn slice_to_u32(data: &[u8]) -> GenericResult<u32> {
-        assert!(data.len() == 4);
+        assert!(data.len() == 4, "There must be exactly four (4) bytes for a conversion to an IPv4.");
 
         return Ok(((data[0] as u32) << 24) +
                   ((data[1] as u32) << 16) +
@@ -38,7 +38,7 @@ impl Helpers {
     }
 
     pub fn slice_to_u128(data: &[u8]) -> GenericResult<u128> {
-        assert!(data.len() == 16);
+        assert!(data.len() == 16, "There must be exactly sixteen (16) bytes for a conversion to an IPv6.");
 
         return Ok(((data[0] as u128) << 120) +
                   ((data[1] as u128) << 112) +
