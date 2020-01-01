@@ -32,7 +32,7 @@ impl Request {
     pub fn from_data(data: &[u8]) -> GenericResult<Self> {
         let version = data[0];
         let command = data[1];
-        let rsv = data[2];
+        let reserved = data[2];
         let address_type = data[3];
 
         if address_type == 0x01 /* IPv4 */ {
@@ -40,11 +40,11 @@ impl Request {
             let port = Helpers::bytes_to_port(&data[8..10])?;
             
             return Ok(Request {
-                version: version,
-                command: command,
-                reserved: rsv,
-                address_type: address_type,
-                port: port,
+                version,
+                command,
+                reserved,
+                address_type,
+                port,
                 destination: Destination::Ipv4Addr(address)
             });
         }
@@ -55,11 +55,11 @@ impl Request {
             let port = Helpers::bytes_to_port(&data[(5 + name_length)..(5 + name_length + 2)])?;
             
             return Ok(Request {
-                version: version,
-                command: command,
-                reserved: rsv,
-                address_type: address_type,
-                port: port,
+                version,
+                command,
+                reserved,
+                address_type,
+                port,
                 destination: Destination::Domain(name)
             });
         }
@@ -69,15 +69,15 @@ impl Request {
             let port = Helpers::bytes_to_port(&data[20..22])?;
 
             return Ok(Request {
-                version: version,
-                command: command,
-                reserved: rsv,
-                address_type: address_type,
-                port: port,
+                version,
+                command,
+                reserved,
+                address_type,
+                port,
                 destination: Destination::Ipv6Addr(address)
             });
         }
 
-        return Err(Box::new(GenericError::from("Unknown request type, or data corrupt.")));
+        Err(Box::new(GenericError::from("Unknown request type, or data corrupt.")))
     }
 }

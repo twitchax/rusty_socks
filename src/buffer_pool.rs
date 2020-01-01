@@ -8,7 +8,7 @@ pub struct BufferPool {
 
 impl BufferPool {
     pub fn new(buffer_size: usize) -> Self {
-        return BufferPool { buffer_size: buffer_size, buffers: Vec::<Arc<Mutex<Vec<u8>>>>::new() };
+        BufferPool { buffer_size, buffers: Vec::<Arc<Mutex<Vec<u8>>>>::new() }
     }
 
     pub fn lease(&mut self) -> Buffer {
@@ -32,20 +32,21 @@ impl BufferPool {
 
         let index = free_buffer_index.unwrap();
 
-        return Buffer::new(self.buffers[index].clone());
+        Buffer::new(self.buffers[index].clone())
     }
 
     pub fn leased_count(&self) -> usize {
-        return self.buffers.iter().filter(|b| Arc::strong_count(b) >= 2).count();
+        self.buffers.iter().filter(|b| Arc::strong_count(b) >= 2).count()
     }
 
     pub fn total_count(&self) -> usize {
-        return self.buffers.len();
+        self.buffers.len()
     }
 
     fn add_buffer(&mut self) -> usize {
         self.buffers.push(Arc::new(Mutex::new(vec![0; self.buffer_size])));
-        return self.buffers.len() - 1;
+
+        self.buffers.len() - 1
     }
 }
 
@@ -55,10 +56,10 @@ pub struct Buffer {
 
 impl Buffer {
     fn new(buffer: Arc<Mutex<Vec<u8>>>) -> Buffer {
-        return Buffer { buffer: buffer.clone() };
+        Buffer { buffer }
     }
 
     pub async fn get(&mut self) -> MutexGuard<'_, Vec<u8>> {
-        return self.buffer.lock().await;
+        self.buffer.lock().await
     }
 }

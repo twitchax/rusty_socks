@@ -11,6 +11,6 @@ impl Handshake {
         let num_methods = data[1];
         let methods = data[2..(2 + usize::from(num_methods))].to_vec();
 
-        return Handshake { version: version, num_methods: num_methods, methods: methods };
+        Handshake { version, num_methods, methods }
     }
 }

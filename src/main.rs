@@ -1,4 +1,5 @@
 #![warn(rust_2018_idioms)]
+#![warn(clippy::all)]
 
 mod connection;
 mod handshake;
@@ -29,17 +30,18 @@ struct Config {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().collect();
-    let mut config: Option<Config> = None;
     
     // Compute options.
 
-    if args.len() == 2 {
+    let config: Option<Config> = if args.len() == 2 {
         let config_file = args[1].to_owned();
-        let config_file_data = tokio::fs::read(config_file).await?.to_owned();
+        let config_file_data = tokio::fs::read(config_file).await?;
         let config_text = std::str::from_utf8(&config_file_data)?;
 
-        config = Some(from_str::<Config>(config_text)?);
-    }
+        Some(from_str::<Config>(config_text)?)
+    } else {
+        None
+    };
 
     let mut listen_interface: Option<String> = None;
     let mut endpoint_interface: Option<String> = None;

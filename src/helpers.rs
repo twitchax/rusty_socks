@@ -11,36 +11,35 @@ pub struct Helpers;
 
 impl Helpers {
     pub fn get_id() -> String {
-        let s = rand::thread_rng()
+        rand::thread_rng()
             .sample_iter(&Alphanumeric)
             .take(4)
-            .collect::<String>();
-
-        return s;
+            .collect::<String>()
     }
 
     pub fn bytes_to_port(data: &[u8]) -> GenericResult<u16> {
         assert!(data.len() == 2, "There must be exactly two (2) bytes for a conversion to a port.");
-        return Ok(((data[0] as u16) << 8) + (data[1] as u16));
+
+        Ok(((data[0] as u16) << 8) + (data[1] as u16))
     }
 
     pub fn port_to_bytes(port: u16) -> (u8, u8) {
-        return ((port >> 8) as u8, (port & 0xff) as u8);
+        ((port >> 8) as u8, (port & 0xff) as u8)
     }
 
     pub fn slice_to_u32(data: &[u8]) -> GenericResult<u32> {
         assert!(data.len() == 4, "There must be exactly four (4) bytes for a conversion to an IPv4.");
 
-        return Ok(((data[0] as u32) << 24) +
+        Ok(((data[0] as u32) << 24) +
                   ((data[1] as u32) << 16) +
                   ((data[2] as u32) <<  8) +
-                   (data[3] as u32));
+                   (data[3] as u32))
     }
 
     pub fn slice_to_u128(data: &[u8]) -> GenericResult<u128> {
         assert!(data.len() == 16, "There must be exactly sixteen (16) bytes for a conversion to an IPv6.");
 
-        return Ok(((data[0] as u128) << 120) +
+        Ok(((data[0] as u128) << 120) +
                   ((data[1] as u128) << 112) +
                   ((data[2] as u128) << 104) +
                   ((data[3] as u128) <<  96) +
@@ -55,11 +54,11 @@ impl Helpers {
                  ((data[12] as u128) <<  24) +
                  ((data[13] as u128) <<  16) +
                  ((data[14] as u128) <<   8) +
-                  (data[15] as u128));
+                  (data[15] as u128))
     }
 
     pub fn get_socks_reply(error: i32) -> u8 {
-        return match error {
+        match error {
             0 =>                     0x00, // succeeded
             10050 | 10051 =>         0x03, // Network unreachable
             10064 | 11001 | 10065 => 0x04, // Host unreachable
@@ -70,9 +69,7 @@ impl Helpers {
     }
 
     pub fn write_octets(buffer: &mut [u8], octets: &[u8]) {
-        for k in 0..octets.len() {
-            buffer[k] = octets[k];
-        }
+        buffer[..octets.len()].clone_from_slice(&octets[..]);
     }
 
     pub fn get_interface_ip(name: &str) -> GenericResult<IpAddr> {
@@ -82,7 +79,7 @@ impl Helpers {
             }
         }
 
-        return Err(Box::new(GenericError::from(format!("Could not lookup IP for interface `{}`.", name))));
+        Err(Box::new(GenericError::from(format!("Could not lookup IP for interface `{}`.", name))))
     }
 }
 
@@ -94,14 +91,14 @@ pub struct GenericError {
 }
 
 impl From<&str> for GenericError {
-    fn from(msg: &str) -> Self {
-        return GenericError { message: msg.to_owned() };
+    fn from(message: &str) -> Self {
+        GenericError { message: message.to_owned() }
     }
 }
 
 impl From<String> for GenericError {
-    fn from(msg: String) -> Self {
-        return GenericError { message: msg };
+    fn from(message: String) -> Self {
+        GenericError { message }
     }
 }
 
@@ -113,6 +110,6 @@ impl Display for GenericError {
 
 impl Error for GenericError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
-        return None;
+        None
     }
 }

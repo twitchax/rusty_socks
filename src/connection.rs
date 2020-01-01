@@ -25,8 +25,8 @@ pub struct Connection {
 }
 
 impl Connection {
-    pub fn from(stream: TcpStream, endpoint_interface: String, buffer: Buffer, read_timeout: u64) -> Self {
-        return Connection { id: Helpers::get_id().to_owned(), client_socket: stream, endpoint_interface: endpoint_interface, buffer: buffer, read_timeout: read_timeout };
+    pub fn from(client_socket: TcpStream, endpoint_interface: String, buffer: Buffer, read_timeout: u64) -> Self {
+        Connection { id: Helpers::get_id(), client_socket, endpoint_interface, buffer, read_timeout }
     }
 
     // `self` Connection is moved when the handle method is called, and ownership is given
@@ -35,14 +35,14 @@ impl Connection {
         debug!("[{}] Start.", self.id);
 
         // Move self into the spawned thread, as well.
-        return tokio::spawn(async move {
+        tokio::spawn(async move {
             match self.handle_task().await {
                 Ok(_) => return,
                 Err(e) => {
                     error!("{}", e);
                 }
             }
-        });
+        })
     }
 
     async fn handle_task(mut self) -> GenericResult<()> {
@@ -105,7 +105,7 @@ impl Connection {
 
         debug!("[{}] End.", self.id);
 
-        return Ok(());
+        Ok(())
     }
 
     async fn perform_handshake(client_socket: &mut TcpStream, buffer: &mut [u8]) -> GenericResult<Handshake> {
@@ -128,7 +128,7 @@ impl Connection {
 
         client_socket.write(&buffer[..2]).await?;
 
-        return Ok(handshake);
+        Ok(handshake)
     }
 
     async fn perform_request_negotiation(client_socket: &mut TcpStream, buffer: &mut [u8]) -> GenericResult<Request> {
@@ -140,7 +140,7 @@ impl Connection {
 
         let request = Request::from_data(buffer)?;
 
-        return Ok(request);
+        Ok(request)
     }
 
     async fn establish_connect_request(client_socket: &mut TcpStream, endpoint_interface: &str, request: &Request, buffer: &mut [u8]) -> GenericResult<TcpStream> {
@@ -227,7 +227,7 @@ impl Connection {
             return Err(Box::new(GenericError::from(err_string)) as Box<dyn std::error::Error> /* hack */);
         }
 
-        return Ok(endpoint_socket.unwrap());
+        Ok(endpoint_socket.unwrap())
     }
 }
 

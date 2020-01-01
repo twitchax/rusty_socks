@@ -17,7 +17,7 @@ pub struct Pump<'a> {
 
 impl<'a> Pump<'a> {
     pub fn from(client_socket: &'a mut TcpStream, endpoint_socket: &'a mut TcpStream, buffer: &'a mut [u8], read_timeout: u64) -> Self {
-        return Pump { client_socket: client_socket, endpoint_socket: endpoint_socket, buffer: buffer, read_timeout: read_timeout };
+        Pump { client_socket, endpoint_socket, buffer, read_timeout }
     }
 
     pub async fn start(self) -> GenericResult<()> {
@@ -42,7 +42,7 @@ impl<'a> Pump<'a> {
 
         futures::future::join(pump_up, pump_down).await;
 
-        return Ok(());
+        Ok(())
     }
 
     async fn run_pump(mut from: ReadHalf<'_>, mut to: WriteHalf<'_>, cancel_sender: Sender<bool>, mut cancel_receiver: Receiver<bool>, buffer: &mut [u8], read_timeout: u64) {
