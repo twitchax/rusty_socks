@@ -80,9 +80,9 @@ impl Connection {
         let mut endpoint_socket: TcpStream;
         match request.command {
             0x01 /* CONNECT */ => endpoint_socket = Connection::establish_connect_request(&mut self.client_socket, &self.endpoint_interface, &request, buffer).await?,
-            0x02 /* BIND */ => return Err(Box::new(GenericError::from("BIND requests not supported.")) /* hack */),
-            0x03 /* UDP ASSOCIATE */ => return Err(Box::new(GenericError::from("UDP ASSOCIATE requests not supported.")) as Box<dyn std::error::Error> /* hack */),
-            _ => return Err(Box::new(GenericError::from("Unknown command type.")) as Box<dyn std::error::Error> /* hack */)
+            0x02 /* BIND */ => return Err(Box::new(GenericError::from("BIND requests not supported."))),
+            0x03 /* UDP ASSOCIATE */ => return Err(Box::new(GenericError::from("UDP ASSOCIATE requests not supported."))),
+            _ => return Err(Box::new(GenericError::from("Unknown command type.")))
         };
 
         // Print the data path.
@@ -112,13 +112,13 @@ impl Connection {
         let read = client_socket.read(buffer).await?;
 
         if read == 0 {
-            return Err(Box::new(GenericError::from("Read 0 bytes during handshake.")) as Box<dyn std::error::Error> /* This is a hack to fix a bug with async/await in rust. */);
+            return Err(Box::new(GenericError::from("Read 0 bytes during handshake.")));
         }
 
         let handshake = Handshake::from_data(buffer);
 
         if handshake.version != 5 {
-            return Err(Box::new(GenericError::from("Bad SOCKS version.")) as Box<dyn std::error::Error> /* hack */);
+            return Err(Box::new(GenericError::from("Bad SOCKS version.")));
         }
 
         // Reuse the buffer since we are borrowing it anyway.
@@ -135,7 +135,7 @@ impl Connection {
         let read = client_socket.read(buffer).await?;
 
         if read == 0 {
-            return Err(Box::new(GenericError::from("Read 0 bytes during connection negotiation.")) as Box<dyn std::error::Error> /* hack */);
+            return Err(Box::new(GenericError::from("Read 0 bytes during connection negotiation.")));
         }
 
         let request = Request::from_data(buffer)?;
@@ -224,7 +224,7 @@ impl Connection {
 
         if error != 0 {
             let err_string = format!("The connection to `{}` failed gracefully with `{}`.", string_to_connect, ERRORS[&reply_field]);
-            return Err(Box::new(GenericError::from(err_string)) as Box<dyn std::error::Error> /* hack */);
+            return Err(Box::new(GenericError::from(err_string)));
         }
 
         Ok(endpoint_socket.unwrap())
