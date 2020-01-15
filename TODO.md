@@ -1,1 +1,1 @@
-* Transport endpoint is not connected (os error 107): probably caused by the write timing out...we should fail gracefully there?
+* IPv6 support.

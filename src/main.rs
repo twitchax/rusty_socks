@@ -5,7 +5,8 @@ mod connection;
 mod handshake;
 mod helpers;
 mod request;
-mod pump;
+//mod custom_pump;
+mod copy_pump;
 mod buffer_pool;
 
 use tokio::net::TcpListener;
@@ -46,7 +47,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut listen_interface: Option<String> = None;
     let mut endpoint_interface: Option<String> = None;
     let mut port = 1080u16;
-    let mut buffer_size = 8192usize;
+    let mut buffer_size = 2048usize;
     let mut read_timeout = 5000u64;
     
     if let Some(c) = config {
@@ -70,6 +71,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Set the log level.
     simple_logger::init().unwrap();
     log::set_max_level(LevelFilter::Info);
+    
+    info!("Listen IP:    {}", listen_ip);
+    info!("Endpoint IP:  {}", endpoint_ip);
+    info!("Port:         {}", port);
+    info!("Buffer Size:  {}", buffer_size);
+    info!("Read Timeout: {}", read_timeout);
 
     // Create a buffer pool (doubled so that each half of the connection achieves the desired size).
     let mut pool = BufferPool::new(2 * buffer_size);

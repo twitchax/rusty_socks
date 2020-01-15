@@ -17,4 +17,5 @@ RUN cargo build --release --target x86_64-unknown-linux-gnu
 # Copy the statically-linked binary into a scratch container.
 FROM ubuntu
 COPY --from=builder /build/rusty_socks/target/x86_64-unknown-linux-gnu/release/rusty_socks .
-CMD ["./rusty_socks"]
+COPY settings.toml .
+CMD ["sh", "-c", "./rusty_socks settings.toml"]

@@ -13,7 +13,8 @@ use phf::{Map, phf_map};
 use crate::handshake::Handshake;
 use crate::helpers::{Helpers, GenericResult, GenericError};
 use crate::request::{Request, Destination};
-use crate::pump::Pump;
+//use crate::custom_pump::CustomPump;
+use crate::copy_pump::CopyPump;
 use crate::buffer_pool::Buffer;
 
 pub struct Connection {
@@ -94,9 +95,10 @@ impl Connection {
 
         info!("[{}] {} => {} => {} => {}", self.id, client_peer_addr, client_local_addr, endpoint_local_addr, endpoint_peer_addr);
 
-        // Run the pump.
+        // Run the pump (all errors in pumps are emitted as log messages and should not disrupt the execution flow).
 
-        Pump::from(&mut self.client_socket, &mut endpoint_socket, buffer, self.read_timeout).start().await?;
+        //CustomPump::from(&self.id, &mut self.client_socket, &mut endpoint_socket, buffer, self.read_timeout).start().await;
+        CopyPump::from(&mut self.client_socket, &mut endpoint_socket).start().await;
 
         // Shutdown sockets and ignore result.
 
