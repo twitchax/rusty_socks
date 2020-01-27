@@ -1,4 +1,4 @@
-# SocksNet
+# rusty_socks
 
 A super basic SOCKS5 proxy.
 
