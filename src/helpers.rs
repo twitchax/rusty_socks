@@ -5,7 +5,21 @@ use rand::{self, Rng};
 use rand::distributions::Alphanumeric;
 
 use pnet::datalink;
-use std::net::IpAddr;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+
+pub enum Cidr {
+    V4(u32, u32),
+    V6(u128, u128)
+}
+
+impl Cidr {
+    pub fn is_trivial(&self) -> bool {
+        match self {
+            Cidr::V4(_, mask) => *mask == 0,
+            Cidr::V6(_, mask) => *mask == 0
+        }
+    }
+}
 
 pub struct Helpers;
 
@@ -80,6 +94,61 @@ impl Helpers {
         }
 
         Err(Box::new(GenericError::from(format!("Could not lookup IP for interface `{}`.", name))))
+    }
+
+    pub fn mask_ipv4(ip: &Ipv4Addr, mask: u32) -> GenericResult<u32> {
+        Ok(Helpers::slice_to_u32(&ip.octets())? & mask) 
+    }
+
+    pub fn mask_ipv6(ip: &Ipv6Addr, mask: u128) -> GenericResult<u128> {
+        Ok(Helpers::slice_to_u128(&ip.octets())? & mask) 
+    }
+
+    pub fn is_ip_in_cidr(ip_addr: &IpAddr, cidr: &Cidr) -> GenericResult<bool> {
+        match cidr {
+            Cidr::V4(prefix, mask) => {
+                match &ip_addr {
+                    IpAddr::V4(ip) => Ok(Helpers::mask_ipv4(ip, *mask)? == *prefix),
+                    _ => Err(Box::new(GenericError::from("Cannot check IPv6 addresses against IPv4 CIDRs.")))
+                }
+            },
+            Cidr::V6(prefix, mask) => {
+                match &ip_addr {
+                    IpAddr::V6(ip) => Ok(Helpers::mask_ipv6(ip, *mask)? == *prefix),
+                    _ => Err(Box::new(GenericError::from("Cannot check IPv4 addresses against IPv6 CIDRs."))),
+                }
+            }
+        }
+    }
+
+    pub fn parse_cidr(s: &str) -> GenericResult<Cidr> {
+        let splits = s.split('/').collect::<Vec<&str>>();
+
+        let ip_addr = splits[0].parse::<IpAddr>()?;
+        let num_mask_bits = splits[1].parse::<u32>()?;
+
+        match ip_addr {
+            IpAddr::V4(ip) => {
+                if num_mask_bits > 32 {
+                    return Err(Box::new(GenericError::from("An IPv4 CIDR prefix must have a mask bit length less than or equal to 32.")));
+                }
+
+                let mask = !(2u32.overflowing_pow(32 - num_mask_bits).0.overflowing_sub(1).0);
+                let prefix = Helpers::slice_to_u32(&ip.octets())? & mask;
+
+                Ok(Cidr::V4(prefix, mask))
+            },
+            IpAddr::V6(ip) => {
+                if num_mask_bits > 128 {
+                    return Err(Box::new(GenericError::from("An IPv4 CIDR prefix must have a mask bit length less than or equal to 128.")));
+                }
+
+                let mask = !(2u128.overflowing_pow(128 - num_mask_bits).0.overflowing_sub(1).0);
+                let prefix = Helpers::slice_to_u128(&ip.octets())? & mask;
+
+                Ok(Cidr::V6(prefix, mask))
+            }
+        }
     }
 }
 

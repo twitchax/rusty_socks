@@ -10,9 +10,10 @@ mod copy_pump;
 mod buffer_pool;
 
 use tokio::net::TcpListener;
+use std::net::Shutdown;
 use toml::from_str;
 use serde::Deserialize;
-use log::{info, debug, LevelFilter};
+use log::{info, debug, warn, LevelFilter};
 use simple_logger;
 
 use connection::Connection;
@@ -25,7 +26,8 @@ struct Config {
     endpoint_interface: Option<String>,
     port: Option<u16>,
     buffer_size: Option<usize>,
-    read_timeout: Option<u64>
+    read_timeout: Option<u64>,
+    accept_cidr: Option<String>
 }
 
 #[tokio::main]
@@ -49,6 +51,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut port = 1080u16;
     let mut buffer_size = 2048usize;
     let mut read_timeout = 5000u64;
+    let mut accept_cidr = "0.0.0.0/0".to_owned();
     
     if let Some(c) = config {
         listen_interface = c.listen_interface;
@@ -56,6 +59,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         port = c.port.unwrap_or(port);
         buffer_size = c.buffer_size.unwrap_or(buffer_size);
         read_timeout = c.read_timeout.unwrap_or(read_timeout);
+        accept_cidr = c.accept_cidr.unwrap_or(accept_cidr);
     }
 
     let listen_ip = match &listen_interface {
@@ -77,6 +81,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("Port:         {}", port);
     info!("Buffer Size:  {}", buffer_size);
     info!("Read Timeout: {}", read_timeout);
+    info!("Accept CIDR:  {}", accept_cidr);
+
+    // Calculate the CIDR prefix and mask.
+    let cidr = Helpers::parse_cidr(&accept_cidr)?;
+    let cidr_is_trivial = cidr.is_trivial();
 
     // Create a buffer pool (doubled so that each half of the connection achieves the desired size).
     let mut pool = BufferPool::new(2 * buffer_size);
@@ -89,10 +98,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     loop {
         debug!("Buffer pool: {} leased / {} total.", pool.leased_count(), pool.total_count());
 
+        // Accept new connections.
         let (stream, _) = listener.accept().await?;
-
-        // TODO: Converting endpoint_interface to owned is a cop out.
-        // Instead, we could compute the lifetimes correctly...
+        let remote_ip = stream.peer_addr()?.ip();
+        
+        // Drop connections that do not match the accept CIDR.
+        if !cidr_is_trivial && !Helpers::is_ip_in_cidr(&remote_ip, &cidr)? {
+            warn!("Request from {} does not match {}: dropping connection.", remote_ip, accept_cidr);
+            stream.shutdown(Shutdown::Both).unwrap_or(());
+            continue;
+        }
+        
         Connection::from(stream, endpoint_ip.to_owned(), pool.lease(), read_timeout).handle();
     }
 }
