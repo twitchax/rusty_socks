@@ -1,7 +1,7 @@
 use std::fmt::Display;
 use std::net::{Ipv4Addr, Ipv6Addr};
 
-use crate::helpers::{Helpers, GenericResult, GenericError};
+use crate::helpers::{Helpers, Res, IntoError};
 
 pub struct Request {
     pub version: u8,
@@ -29,7 +29,7 @@ impl Display for Destination {
 }
 
 impl Request {
-    pub fn from_data(data: &[u8]) -> GenericResult<Self> {
+    pub fn from_data(data: &[u8]) -> Res<Self> {
         let version = data[0];
         let command = data[1];
         let reserved = data[2];
@@ -78,6 +78,6 @@ impl Request {
             });
         }
 
-        Err(Box::new(GenericError::from("Unknown request type, or data corrupt.")))
+        "Unknown request type, or data corrupt.".into_error()
     }
 }

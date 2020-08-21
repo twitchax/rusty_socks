@@ -1,5 +1,6 @@
 #![warn(rust_2018_idioms)]
 #![warn(clippy::all)]
+//#![feature(test)]
 
 mod connection;
 mod handshake;
@@ -8,13 +9,13 @@ mod request;
 //mod custom_pump;
 mod copy_pump;
 mod buffer_pool;
+//mod tests;
 
 use tokio::net::TcpListener;
 use std::net::Shutdown;
 use toml::from_str;
 use serde::Deserialize;
 use log::{info, debug, warn, LevelFilter};
-use simple_logger;
 
 use connection::Connection;
 use helpers::Helpers;

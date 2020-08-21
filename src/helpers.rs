@@ -31,8 +31,10 @@ impl Helpers {
             .collect::<String>()
     }
 
-    pub fn bytes_to_port(data: &[u8]) -> GenericResult<u16> {
-        assert!(data.len() == 2, "There must be exactly two (2) bytes for a conversion to a port.");
+    pub fn bytes_to_port(data: &[u8]) -> Res<u16> {
+        if data.len() != 2 {
+            return "There must be exactly two (2) bytes for a conversion to a port.".into_error();
+        }
 
         Ok(((data[0] as u16) << 8) + (data[1] as u16))
     }
@@ -41,8 +43,10 @@ impl Helpers {
         ((port >> 8) as u8, (port & 0xff) as u8)
     }
 
-    pub fn slice_to_u32(data: &[u8]) -> GenericResult<u32> {
-        assert!(data.len() == 4, "There must be exactly four (4) bytes for a conversion to an IPv4.");
+    pub fn slice_to_u32(data: &[u8]) -> Res<u32> {
+        if data.len() != 4 {
+            return "There must be exactly four (4) bytes for a conversion to an IPv4.".into_error();
+        }
 
         Ok(((data[0] as u32) << 24) +
                   ((data[1] as u32) << 16) +
@@ -50,8 +54,10 @@ impl Helpers {
                    (data[3] as u32))
     }
 
-    pub fn slice_to_u128(data: &[u8]) -> GenericResult<u128> {
-        assert!(data.len() == 16, "There must be exactly sixteen (16) bytes for a conversion to an IPv6.");
+    pub fn slice_to_u128(data: &[u8]) -> Res<u128> {
+        if data.len() != 16 {
+            return "There must be exactly sixteen (16) bytes for a conversion to an IPv6.".into_error();
+        }
 
         Ok(((data[0] as u128) << 120) +
                   ((data[1] as u128) << 112) +
@@ -86,25 +92,29 @@ impl Helpers {
         buffer[..octets.len()].clone_from_slice(&octets[..]);
     }
 
-    pub fn get_interface_ip(name: &str) -> GenericResult<IpAddr> {
+    pub fn get_interface_ip(name: &str) -> Res<IpAddr> {
         for iface in datalink::interfaces() {
             if iface.name == name {
+                if iface.ips.is_empty() {
+                    return format!("Found interface `{}`, but could not find an assigned IP for that interface.", name).into_error();
+                }   
+
                 return Ok(iface.ips[0].ip());
             }
         }
 
-        Err(Box::new(GenericError::from(format!("Could not lookup IP for interface `{}`.", name))))
+        format!("Could not lookup IP for interface `{}`.", name).into_error()
     }
 
-    pub fn mask_ipv4(ip: &Ipv4Addr, mask: u32) -> GenericResult<u32> {
+    pub fn mask_ipv4(ip: &Ipv4Addr, mask: u32) -> Res<u32> {
         Ok(Helpers::slice_to_u32(&ip.octets())? & mask) 
     }
 
-    pub fn mask_ipv6(ip: &Ipv6Addr, mask: u128) -> GenericResult<u128> {
+    pub fn mask_ipv6(ip: &Ipv6Addr, mask: u128) -> Res<u128> {
         Ok(Helpers::slice_to_u128(&ip.octets())? & mask) 
     }
 
-    pub fn is_ip_in_cidr(ip_addr: &IpAddr, cidr: &Cidr) -> GenericResult<bool> {
+    pub fn is_ip_in_cidr(ip_addr: &IpAddr, cidr: &Cidr) -> Res<bool> {
         match cidr {
             Cidr::V4(prefix, mask) => {
                 match &ip_addr {
@@ -121,7 +131,7 @@ impl Helpers {
         }
     }
 
-    pub fn parse_cidr(s: &str) -> GenericResult<Cidr> {
+    pub fn parse_cidr(s: &str) -> Res<Cidr> {
         let splits = s.split('/').collect::<Vec<&str>>();
 
         let ip_addr = splits[0].parse::<IpAddr>()?;
@@ -152,22 +162,31 @@ impl Helpers {
     }
 }
 
-pub type GenericResult<T> = Result<T,Box<dyn Error + 'static>>;
+pub type Void = Result<(), Box<dyn std::error::Error>>;
+pub type Res<T> = Result<T, Box<dyn std::error::Error>>;
+
+pub trait IntoError<T> {
+    fn into_error(self) -> Res<T>;
+}
+
+impl<T, S> IntoError<T> for S 
+    where S: AsRef<str> + ToString
+{
+    fn into_error(self) -> Res<T> {
+        Err(Box::new(GenericError::from(self)))
+    }
+}
 
 #[derive(Debug)]
 pub struct GenericError {
     message: String
 }
 
-impl From<&str> for GenericError {
-    fn from(message: &str) -> Self {
-        GenericError { message: message.to_owned() }
-    }
-}
-
-impl From<String> for GenericError {
-    fn from(message: String) -> Self {
-        GenericError { message }
+impl<T> From<T> for GenericError 
+    where T: AsRef<str> + ToString 
+{
+    fn from(message: T) -> Self {
+        GenericError { message: message.to_string() }
     }
 }
 

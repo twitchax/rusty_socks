@@ -11,7 +11,7 @@ use log::{error, info, debug};
 use phf::{Map, phf_map};
 
 use crate::handshake::Handshake;
-use crate::helpers::{Helpers, GenericResult, GenericError};
+use crate::helpers::{Helpers, Res, Void, IntoError};
 use crate::request::{Request, Destination};
 //use crate::custom_pump::CustomPump;
 use crate::copy_pump::CopyPump;
@@ -46,7 +46,7 @@ impl Connection {
         })
     }
 
-    async fn handle_task(mut self) -> GenericResult<()> {
+    async fn handle_task(mut self) -> Void {
         // Get a &mut slice from the leased buffer.
         let buffer = &mut self.buffer.get().await[..];
 
@@ -81,9 +81,9 @@ impl Connection {
         let mut endpoint_socket: TcpStream;
         match request.command {
             0x01 /* CONNECT */ => endpoint_socket = Connection::establish_connect_request(&mut self.client_socket, &self.endpoint_interface, &request, buffer).await?,
-            0x02 /* BIND */ => return Err(Box::new(GenericError::from("BIND requests not supported."))),
-            0x03 /* UDP ASSOCIATE */ => return Err(Box::new(GenericError::from("UDP ASSOCIATE requests not supported."))),
-            _ => return Err(Box::new(GenericError::from("Unknown command type.")))
+            0x02 /* BIND */ => return "BIND requests not supported.".into_error(),
+            0x03 /* UDP ASSOCIATE */ => return "UDP ASSOCIATE requests not supported.".into_error(),
+            _ => return "Unknown command type.".into_error()
         };
 
         // Print the data path.
@@ -110,17 +110,17 @@ impl Connection {
         Ok(())
     }
 
-    async fn perform_handshake(client_socket: &mut TcpStream, buffer: &mut [u8]) -> GenericResult<Handshake> {
+    async fn perform_handshake(client_socket: &mut TcpStream, buffer: &mut [u8]) -> Res<Handshake> {
         let read = client_socket.read(buffer).await?;
 
         if read == 0 {
-            return Err(Box::new(GenericError::from("Read 0 bytes during handshake.")));
+            return "Read 0 bytes during handshake.".into_error();
         }
 
         let handshake = Handshake::from_data(buffer);
 
         if handshake.version != 5 {
-            return Err(Box::new(GenericError::from("Bad SOCKS version.")));
+            return "Bad SOCKS version.".into_error();
         }
 
         // Reuse the buffer since we are borrowing it anyway.
@@ -133,11 +133,11 @@ impl Connection {
         Ok(handshake)
     }
 
-    async fn perform_request_negotiation(client_socket: &mut TcpStream, buffer: &mut [u8]) -> GenericResult<Request> {
+    async fn perform_request_negotiation(client_socket: &mut TcpStream, buffer: &mut [u8]) -> Res<Request> {
         let read = client_socket.read(buffer).await?;
 
         if read == 0 {
-            return Err(Box::new(GenericError::from("Read 0 bytes during connection negotiation.")));
+            return "Read 0 bytes during connection negotiation.".into_error();
         }
 
         let request = Request::from_data(buffer)?;
@@ -145,7 +145,7 @@ impl Connection {
         Ok(request)
     }
 
-    async fn establish_connect_request(client_socket: &mut TcpStream, endpoint_interface: &str, request: &Request, buffer: &mut [u8]) -> GenericResult<TcpStream> {
+    async fn establish_connect_request(client_socket: &mut TcpStream, endpoint_interface: &str, request: &Request, buffer: &mut [u8]) -> Res<TcpStream> {
         let mut error: i32 = 0x00;
 
         // Get requested local interface.
@@ -225,8 +225,7 @@ impl Connection {
         // In a failure scenario, ensure the SOCKS process does not continue.
 
         if error != 0 {
-            let err_string = format!("The connection to `{}` failed gracefully with `{}`.", string_to_connect, ERRORS[&reply_field]);
-            return Err(Box::new(GenericError::from(err_string)));
+            return format!("The connection to `{}` failed gracefully with `{}`.", string_to_connect, ERRORS[&reply_field]).into_error();
         }
 
         Ok(endpoint_socket.unwrap())
