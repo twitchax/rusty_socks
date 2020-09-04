@@ -7,7 +7,7 @@ use std::iter::IntoIterator;
 use std::str::FromStr;
 use std::net::{SocketAddr, IpAddr, ToSocketAddrs};
 use net2::TcpBuilder;
-use log::{error, info, debug};
+use log::{error, info, debug, warn};
 use phf::{Map, phf_map};
 
 use crate::handshake::Handshake;
@@ -146,88 +146,98 @@ impl Connection {
     }
 
     async fn establish_connect_request(client_socket: &mut TcpStream, endpoint_interface: &str, request: &Request, buffer: &mut [u8]) -> Res<TcpStream> {
-        let mut error: i32 = 0x00;
+        let mut reply = 0u8;
 
         // Get requested local interface.
-        let string_to_bind = format!("{}:{}", endpoint_interface, 0); // Have to split into two statements due to Rust bug: https://github.com/rust-lang/rust/issues/64960.
-        let local_addr = SocketAddr::from_str(&string_to_bind)?;
+        let local_addr = SocketAddr::from_str(&format!("{}:{}", endpoint_interface, 0))?;
+
+        // Bind to requested local address.
+        // [ARoney] TODO: Don't hardcode this to ipv4...
+        let stream = TcpBuilder::new_v4()?.bind(local_addr)?.to_tcp_stream()?;
         
         // Get endpoint address.
         let string_to_connect = format!("{}:{}", request.destination, request.port);
         let endpoint_addr_iterator = string_to_connect.to_socket_addrs();
-        let mut endpoint_addr_option: Option<SocketAddr> = None;
-        match endpoint_addr_iterator {
-            Ok(a) => endpoint_addr_option = Some(a.collect::<Vec<SocketAddr>>()[0]),
-            Err(e) => error = match e.raw_os_error() {
-                Some(i) => i,
-                None => 0
-            }
-        }
+
+        // Compute valid endpoint addresses, and connect to endpoint.
         
-        // Bind to requested local address.
-        // [ARoney] TODO: Don't hardcode this to ipv4...
-        let standard_stream = TcpBuilder::new_v4()?.bind(local_addr)?.to_tcp_stream()?;
-        
-        // Connect to endpoint.
-        let mut endpoint_socket: Option<TcpStream> = None;
-        if let Some(endpoint_addr) = endpoint_addr_option {
-            match TcpStream::connect_std(standard_stream, &endpoint_addr).await {
-                Ok(s) => endpoint_socket = Some(s),
-                Err(e) => error = match e.raw_os_error() {
-                    Some(i) => i,
-                    None => 0
+        let endpoint_socket = match endpoint_addr_iterator {
+            Ok(a) => {
+                let endpoint_addr = a.collect::<Vec<SocketAddr>>()[0];
+
+                match TcpStream::connect_std(stream, &endpoint_addr).await {
+                    Ok(s) => Some(s),
+                    Err(e) => {
+                        warn!("Could not connect to {} ({}).", string_to_connect, endpoint_addr);
+                        
+                        reply = match e.raw_os_error() {
+                            Some(i) => Helpers::get_socks_reply(i),
+                            _ => 5u8 // Connection refused?.
+                        };
+
+                        None
+                    }
                 }
+            },
+            Err(e) => {
+                warn!("Could compute an endpoint address for {}.", string_to_connect);
+                
+                reply = match e.raw_os_error() {
+                    Some(i) => Helpers::get_socks_reply(i),
+                    _ => 8u8 // Address type not supported.
+                };
+
+                None
             }
-        }
+        };
         
         // Get the local IP and port.
         let local_ip = local_addr.ip();
         let (port_high, port_low) = Helpers::port_to_bytes(local_addr.port());
 
-        // Compute correct reply field.
-        let reply_field = Helpers::get_socks_reply(error);
-
         // Prepare reply.
 
-        let mut reply_length = 0;
-
-        buffer[0] = 0x05; // VERSION.local_addr
-        buffer[1] = reply_field;
+        buffer[0] = 0x05; // VERSION.
+        buffer[1] = reply;
         buffer[2] = 0x0; // RESERVED.
 
-        if let IpAddr::V4(ipv4) = local_ip {
-            let octets = ipv4.octets();
+        let reply_length = match local_ip {
+            IpAddr::V4(ipv4) => {
+                let octets = ipv4.octets();
 
-            buffer[3] = 0x01; // ADDRESS TYPE (IPv4).
-            buffer[4] = octets[0]; buffer[5] = octets[1]; buffer[6] = octets[2]; buffer[7] = octets[3];
-            Helpers::write_octets(&mut buffer[4..8], &octets);
+                buffer[3] = 0x01; // ADDRESS TYPE (IPv4).
+                buffer[4] = octets[0]; buffer[5] = octets[1]; buffer[6] = octets[2]; buffer[7] = octets[3];
+                Helpers::write_octets(&mut buffer[4..8], &octets);
 
-            buffer[8] = port_high;
-            buffer[9] = port_low;
+                buffer[8] = port_high;
+                buffer[9] = port_low;
 
-            reply_length = 10;
-        } else if let IpAddr::V6(ipv6) = local_ip {
-            let octets = ipv6.octets();
+                10
+            },
+            IpAddr::V6(ipv6) => {
+                let octets = ipv6.octets();
 
-            buffer[3] = 0x04; // ADDRESS TYPE (IPv6).
-            Helpers::write_octets(&mut buffer[4..20], &octets);
+                buffer[3] = 0x04; // ADDRESS TYPE (IPv6).
+                Helpers::write_octets(&mut buffer[4..20], &octets);
 
-            buffer[20] = port_high;
-            buffer[21] = port_low;
+                buffer[20] = port_high;
+                buffer[21] = port_low;
 
-            reply_length = 22;
-        }
+                22
+            }
+        };
 
         // Send a response to the client, even if there is a failure.
 
         client_socket.write(&buffer[0..reply_length]).await?;
 
         // In a failure scenario, ensure the SOCKS process does not continue.
-
-        if error != 0 {
-            return format!("The connection to `{}` failed gracefully with `{}`.", string_to_connect, ERRORS[&reply_field]).into_error();
+        
+        if reply != 0 {
+            return format!("The connection to `{}` failed gracefully with `{}`.", string_to_connect, ERRORS[&reply]).into_error();
         }
-
+        
+        // This should only be `None` if there is an error, which aborts above.
         Ok(endpoint_socket.unwrap())
     }
 }
@@ -250,5 +260,6 @@ static ERRORS: Map<u8, &'static str> = phf_map! {
     3u8 => "Network Unreachable",
     4u8 => "Host Unreachable",
     5u8 => "Connection Refused",
-    6u8 => "TTL Expired"
+    6u8 => "TTL Expired",
+    8u8 => "Address type not supported"
 };
