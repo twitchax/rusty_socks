@@ -180,7 +180,7 @@ impl Connection {
                 }
             },
             Err(e) => {
-                warn!("Could compute an endpoint address for {}.", string_to_connect);
+                warn!("Could not compute an endpoint address for {}.", string_to_connect);
                 
                 reply = match e.raw_os_error() {
                     Some(i) => Helpers::get_socks_reply(i),
