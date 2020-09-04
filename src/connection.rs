@@ -168,7 +168,7 @@ impl Connection {
                 match TcpStream::connect_std(stream, &endpoint_addr).await {
                     Ok(s) => Some(s),
                     Err(e) => {
-                        warn!("Could not connect to {} ({}).", string_to_connect, endpoint_addr);
+                        warn!("Could not connect to `{}` (`{}`).", string_to_connect, endpoint_addr);
                         
                         reply = match e.raw_os_error() {
                             Some(i) => Helpers::get_socks_reply(i),
@@ -180,7 +180,7 @@ impl Connection {
                 }
             },
             Err(e) => {
-                warn!("Could not compute an endpoint address for {}.", string_to_connect);
+                warn!("Could not compute an endpoint address for `{}`.", string_to_connect);
                 
                 reply = match e.raw_os_error() {
                     Some(i) => Helpers::get_socks_reply(i),
