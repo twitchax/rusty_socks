@@ -7,11 +7,11 @@ edition = "2018"
 [dependencies]
 rand = "0.7.2"
 net2 = "0.2.33"
-futures = "0.3.1"
-pnet = "0.23.0"
+futures = "0.3.16"
+pnet = "0.28.0"
 toml = "0.5.5"
 simple_logger = "1.0.1"
 log = { version = "0.4.8", features = ["release_max_level_info"] }
 phf = { version = "0.8.0", features = ["macros"] }
 serde = { version = "1.0.104", features = ["derive"] }
-tokio = { version = "0.2.4", features = ["full"] }
+tokio = { version = "1.9.0", features = ["full"] }

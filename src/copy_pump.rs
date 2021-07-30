@@ -18,8 +18,8 @@ impl<'a> CopyPump<'a> {
         let (mut client_socket_read, mut client_socket_write) = self.client_socket.split();
         let (mut endpoint_socket_read, mut endpoint_socket_write) = self.endpoint_socket.split();
 
-        let pump_up = tokio::io::copy(&mut client_socket_read, &mut endpoint_socket_write);
-        let pump_down = tokio::io::copy(&mut endpoint_socket_read, &mut client_socket_write);
+        let pump_up = Box::pin(tokio::io::copy(&mut client_socket_read, &mut endpoint_socket_write));
+        let pump_down = Box::pin(tokio::io::copy(&mut endpoint_socket_read, &mut client_socket_write));
 
         futures::future::select(
             pump_up,

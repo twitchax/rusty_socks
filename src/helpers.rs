@@ -89,7 +89,7 @@ impl Helpers {
     }
 
     pub fn write_octets(buffer: &mut [u8], octets: &[u8]) {
-        buffer[..octets.len()].clone_from_slice(&octets[..]);
+        buffer[..octets.len()].clone_from_slice(octets);
     }
 
     pub fn get_interface_ip(name: &str) -> Res<IpAddr> {

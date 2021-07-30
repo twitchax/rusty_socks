@@ -11,15 +11,12 @@ mod copy_pump;
 mod buffer_pool;
 mod config;
 
-use tokio::net::TcpListener;
-use std::net::Shutdown;
+use tokio::{io::AsyncWriteExt, net::TcpListener};
 use log::{info, debug, warn, LevelFilter};
 
 use connection::Connection;
 use helpers::Helpers;
 use buffer_pool::BufferPool;
-
-
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -54,7 +51,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut pool = BufferPool::new(2 * config.buffer_size);
 
     // Start the server.
-    let mut listener = TcpListener::bind(format!("{}:{}", config.listen_ip, config.port)).await?;
+    let listener = TcpListener::bind(format!("{}:{}", config.listen_ip, config.port)).await?;
     info!("Listening on tcp://{}:{} ... ", config.listen_ip, config.port);
 
     // Server loop.
@@ -62,13 +59,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         debug!("Buffer pool: {} leased / {} total.", pool.leased_count(), pool.total_count());
 
         // Accept new connections.
-        let (stream, _) = listener.accept().await?;
+        let (mut stream, _) = listener.accept().await?;
         let remote_ip = stream.peer_addr()?.ip();
         
         // Drop connections that do not match the accept CIDR.
         if !cidr_is_trivial && !Helpers::is_ip_in_cidr(&remote_ip, &cidr)? {
             warn!("Request from {} does not match {}: dropping connection.", remote_ip, config.accept_cidr);
-            stream.shutdown(Shutdown::Both).unwrap_or(());
+            stream.shutdown().await.unwrap_or_default();
             continue;
         }
         

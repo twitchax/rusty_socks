@@ -1,8 +1,7 @@
 use tokio::task::JoinHandle;
 use tokio::net::{TcpStream};
-use tokio::prelude::*;
+use tokio::io::AsyncWriteExt;
 
-use std::net::Shutdown;
 use std::iter::IntoIterator;
 use std::str::FromStr;
 use std::net::{SocketAddr, IpAddr, ToSocketAddrs};
@@ -38,7 +37,7 @@ impl Connection {
         // Move self into the spawned thread, as well.
         tokio::spawn(async move {
             match self.handle_task().await {
-                Ok(_) => return,
+                Ok(_) => {},
                 Err(e) => {
                     error!("{}", e);
                 }
@@ -102,8 +101,8 @@ impl Connection {
 
         // Shutdown sockets and ignore result.
 
-        self.client_socket.shutdown(Shutdown::Both).unwrap_or(());
-        endpoint_socket.shutdown(Shutdown::Both).unwrap_or(());
+        self.client_socket.shutdown().await.unwrap_or_default();
+        endpoint_socket.shutdown().await.unwrap_or_default();
 
         debug!("[{}] End.", self.id);
 
@@ -111,7 +110,7 @@ impl Connection {
     }
 
     async fn perform_handshake(client_socket: &mut TcpStream, buffer: &mut [u8]) -> Res<Handshake> {
-        let read = client_socket.read(buffer).await?;
+        let read = client_socket.try_read(buffer)?;
 
         if read == 0 {
             return "Read 0 bytes during handshake.".into_error();
@@ -134,7 +133,7 @@ impl Connection {
     }
 
     async fn perform_request_negotiation(client_socket: &mut TcpStream, buffer: &mut [u8]) -> Res<Request> {
-        let read = client_socket.read(buffer).await?;
+        let read = client_socket.try_read(buffer)?;
 
         if read == 0 {
             return "Read 0 bytes during connection negotiation.".into_error();
@@ -150,10 +149,6 @@ impl Connection {
 
         // Get requested local interface.
         let local_addr = SocketAddr::from_str(&format!("{}:{}", endpoint_interface, 0))?;
-
-        // Bind to requested local address.
-        // [ARoney] TODO: Don't hardcode this to ipv4...
-        let stream = TcpBuilder::new_v4()?.bind(local_addr)?.to_tcp_stream()?;
         
         // Get endpoint address.
         let string_to_connect = format!("{}:{}", request.destination, request.port);
@@ -165,7 +160,11 @@ impl Connection {
             Ok(a) => {
                 let endpoint_addr = a.collect::<Vec<SocketAddr>>()[0];
 
-                match TcpStream::connect_std(stream, &endpoint_addr).await {
+                // Bind to requested local address.
+                // [ARoney] TODO: Don't hardcode this to ipv4...
+                let std_stream = TcpBuilder::new_v4()?.bind(local_addr)?.connect(endpoint_addr)?;
+
+                match TcpStream::from_std(std_stream) {
                     Ok(s) => Some(s),
                     Err(e) => {
                         warn!("Could not connect to `{}` (`{}`).", string_to_connect, endpoint_addr);
