@@ -1,4 +1,4 @@
-use tokio::task::JoinHandle;
+use tokio::{io::AsyncReadExt, task::JoinHandle};
 use tokio::net::{TcpStream};
 use tokio::io::AsyncWriteExt;
 
@@ -110,7 +110,7 @@ impl Connection {
     }
 
     async fn perform_handshake(client_socket: &mut TcpStream, buffer: &mut [u8]) -> Res<Handshake> {
-        let read = client_socket.try_read(buffer)?;
+        let read = client_socket.read(buffer).await?;
 
         if read == 0 {
             return "Read 0 bytes during handshake.".into_error();
@@ -133,7 +133,7 @@ impl Connection {
     }
 
     async fn perform_request_negotiation(client_socket: &mut TcpStream, buffer: &mut [u8]) -> Res<Request> {
-        let read = client_socket.try_read(buffer)?;
+        let read = client_socket.read(buffer).await?;
 
         if read == 0 {
             return "Read 0 bytes during connection negotiation.".into_error();
