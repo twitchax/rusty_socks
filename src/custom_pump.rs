@@ -1,26 +1,23 @@
-use tokio::net::TcpStream;
+use tokio::{io::{AsyncReadExt, AsyncWriteExt}, net::{TcpStream, tcp::{OwnedReadHalf, OwnedWriteHalf}}, time::sleep};
 use tokio::net::tcp::{ReadHalf, WriteHalf};
-use tokio::prelude::*;
 
-use tokio::time::{delay_for, Duration};
+use tokio::time::{Duration};
 use tokio::sync::oneshot::{channel, Sender, Receiver};
-use futures::future::Either;
+use futures::{future::Either, pin_mut};
 
 use log::trace;
 use log::error;
 
-use crate::helpers::GenericResult;
-
 pub struct CustomPump<'a> {
     id: &'a str,
-    client_socket: &'a mut TcpStream,
-    endpoint_socket: &'a mut TcpStream,
+    client_socket: TcpStream,
+    endpoint_socket: TcpStream,
     buffer: &'a mut [u8],
     read_timeout: u64
 }
 
 impl<'a> CustomPump<'a> {
-    pub fn from(id: &'a str, client_socket: &'a mut TcpStream, endpoint_socket: &'a mut TcpStream, buffer: &'a mut [u8], read_timeout: u64) -> Self {
+    pub fn from(id: &'a str, client_socket: TcpStream, endpoint_socket: TcpStream, buffer: &'a mut [u8], read_timeout: u64) -> Self {
         CustomPump { id, client_socket, endpoint_socket, buffer, read_timeout }
     }
 
@@ -28,14 +25,14 @@ impl<'a> CustomPump<'a> {
         self.run_pumps_custom().await;
     }
 
-    async fn run_pumps_custom(&mut self) {
+    async fn run_pumps_custom(mut self) {
         // Split the buffer.
         let buffer_size = self.buffer.len();
         let (buffer_up, buffer_down) = self.buffer.split_at_mut(buffer_size / 2);
 
         // Split the sockets.
-        let (client_socket_read, client_socket_write) = self.client_socket.split();
-        let (endpoint_socket_read, endpoint_socket_write) = self.endpoint_socket.split();
+        let (client_socket_read, client_socket_write) = self.client_socket.into_split();
+        let (endpoint_socket_read, endpoint_socket_write) = self.endpoint_socket.into_split();
 
         // Create cancellation channels.
         let (client_cancellation_sender, client_cancellation_receiver) = channel::<bool>();
@@ -54,18 +51,24 @@ impl<'a> CustomPump<'a> {
     async fn run_pump(
         id: &str,
         direction: &str,
-        mut from: ReadHalf<'_>, 
-        mut to: WriteHalf<'_>, 
+        mut from: OwnedReadHalf, 
+        mut to: OwnedWriteHalf, 
         cancel_sender: Sender<bool>, 
         mut cancel_receiver: Receiver<bool>, 
         mut buffer: &mut [u8], 
         read_timeout: u64
     ) {
         loop {
+            let mut read_fut = from.read(buffer);
+            let mut timeout_fut = sleep(Duration::from_millis(read_timeout));
+
+            pin_mut!(read_fut);
+            pin_mut!(timeout_fut);
+
             // Read or timeout.
             let select_future = futures::future::select(
-                from.read(&mut buffer[..]),
-                delay_for(Duration::from_millis(read_timeout))
+                read_fut,
+                timeout_fut
             ).await;
             
             // If we read successfully, write.
@@ -77,11 +80,14 @@ impl<'a> CustomPump<'a> {
                     cancel_sender.send(true).unwrap_or_default();
                     return;
                 }
-
-                let write_result = to.write_all(&buffer[..read]).await;
-
-                if let Err(err) = write_result {
+                
+                if let Err(err) = to.write_all(&buffer[..read]).await {
                     error!("[{}] Failed to write {} {} bytes of data, closing: {}", id, direction, read, err);
+                    return;
+                }
+
+                if let Err(err) = to.flush().await {
+                    error!("[{}] Failed to flush {} {} bytes of data, closing: {}", id, direction, read, err);
                     return;
                 }
 

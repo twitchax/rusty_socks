@@ -1,4 +1,4 @@
-use tokio::{io::AsyncReadExt, task::JoinHandle};
+use tokio::{io::AsyncReadExt, net::TcpSocket, task::JoinHandle};
 use tokio::net::{TcpStream};
 use tokio::io::AsyncWriteExt;
 
@@ -96,13 +96,8 @@ impl Connection {
 
         // Run the pump (all errors in pumps are emitted as log messages and should not disrupt the execution flow).
 
-        //CustomPump::from(&self.id, &mut self.client_socket, &mut endpoint_socket, buffer, self.read_timeout).start().await;
-        CopyPump::from(&mut self.client_socket, &mut endpoint_socket).start().await;
-
-        // Shutdown sockets and ignore result.
-
-        self.client_socket.shutdown().await.unwrap_or_default();
-        endpoint_socket.shutdown().await.unwrap_or_default();
+        //CustomPump::from(&self.id, self.client_socket, endpoint_socket, buffer, self.read_timeout).start().await;
+        CopyPump::from(self.client_socket, endpoint_socket).start().await;
 
         debug!("[{}] End.", self.id);
 
@@ -127,7 +122,8 @@ impl Connection {
         buffer[0] = 0x05; // VERSION.
         buffer[1] = 0x00; // NO AUTH.
 
-        client_socket.write(&buffer[..2]).await?;
+        client_socket.write_all(&buffer[..2]).await?;
+        client_socket.flush().await?;
 
         Ok(handshake)
     }
@@ -154,17 +150,18 @@ impl Connection {
         let string_to_connect = format!("{}:{}", request.destination, request.port);
         let endpoint_addr_iterator = string_to_connect.to_socket_addrs();
 
+        // Bind to requested local address.
+        // [ARoney] TODO: Don't hardcode this to ipv4...
+        let socket = TcpSocket::new_v4()?;
+        socket.bind(local_addr)?;
+
         // Compute valid endpoint addresses, and connect to endpoint.
         
         let endpoint_socket = match endpoint_addr_iterator {
             Ok(a) => {
                 let endpoint_addr = a.collect::<Vec<SocketAddr>>()[0];
 
-                // Bind to requested local address.
-                // [ARoney] TODO: Don't hardcode this to ipv4...
-                let std_stream = TcpBuilder::new_v4()?.bind(local_addr)?.connect(endpoint_addr)?;
-
-                match TcpStream::from_std(std_stream) {
+                match socket.connect(endpoint_addr).await {
                     Ok(s) => Some(s),
                     Err(e) => {
                         warn!("Could not connect to `{}` (`{}`).", string_to_connect, endpoint_addr);
@@ -228,7 +225,8 @@ impl Connection {
 
         // Send a response to the client, even if there is a failure.
 
-        client_socket.write(&buffer[0..reply_length]).await?;
+        client_socket.write_all(&buffer[0..reply_length]).await?;
+        client_socket.flush().await?;
 
         // In a failure scenario, ensure the SOCKS process does not continue.
         
