@@ -36,6 +36,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     simple_logger::init().unwrap();
     log::set_max_level(LevelFilter::Info);
     
+    info!("Version:      2.0.0");
     info!("Listen IP:    {}", config.listen_ip);
     info!("Endpoint IP:  {}", config.endpoint_ip);
     info!("Port:         {}", config.port);

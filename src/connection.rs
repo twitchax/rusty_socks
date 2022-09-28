@@ -5,7 +5,6 @@ use tokio::io::AsyncWriteExt;
 use std::iter::IntoIterator;
 use std::str::FromStr;
 use std::net::{SocketAddr, IpAddr, ToSocketAddrs};
-use net2::TcpBuilder;
 use log::{error, info, debug, warn};
 use phf::{Map, phf_map};
 
@@ -77,7 +76,7 @@ impl Connection {
 
         // Perform requested action.
 
-        let mut endpoint_socket: TcpStream;
+        let endpoint_socket: TcpStream;
         match request.command {
             0x01 /* CONNECT */ => endpoint_socket = Connection::establish_connect_request(&mut self.client_socket, &self.endpoint_interface, &request, buffer).await?,
             0x02 /* BIND */ => return "BIND requests not supported.".into_error(),
@@ -148,20 +147,24 @@ impl Connection {
         
         // Get endpoint address.
         let string_to_connect = format!("{}:{}", request.destination, request.port);
-        let endpoint_addr_iterator = string_to_connect.to_socket_addrs();
-
-        // Bind to requested local address.
-        // [ARoney] TODO: Don't hardcode this to ipv4...
-        let socket = TcpSocket::new_v4()?;
-        socket.bind(local_addr)?;
+        let endpoint_addr_iterator = dbg!(string_to_connect.to_socket_addrs());
 
         // Compute valid endpoint addresses, and connect to endpoint.
-        
         let endpoint_socket = match endpoint_addr_iterator {
             Ok(addresses) => {
                 // [ARoney] TODO: Don't hardcode this to ipv4...
                 let endpoint_addr = addresses.into_iter().find(|a| a.is_ipv4()).unwrap();
 
+                // Bind to requested local address.
+                let socket = if endpoint_addr.is_ipv4() {
+                    TcpSocket::new_v4()?
+                } else {
+                    TcpSocket::new_v6()?
+                };
+
+                socket.bind(local_addr)?;
+
+                // Connect to endpoint.
                 match socket.connect(endpoint_addr).await {
                     Ok(s) => Some(s),
                     Err(e) => {

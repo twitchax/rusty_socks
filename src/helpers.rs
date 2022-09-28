@@ -192,7 +192,7 @@ impl<T> From<T> for GenericError
 
 impl Display for GenericError {
     fn fmt<'a>(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        return write!(f, "{}", self.message);
+        write!(f, "{}", self.message)
     }
 }
 

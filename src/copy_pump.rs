@@ -1,5 +1,4 @@
 use futures::pin_mut;
-use log::info;
 use tokio::net::TcpStream;
 
 pub struct CopyPump {
@@ -12,7 +11,7 @@ impl CopyPump {
         CopyPump { client_socket, endpoint_socket }
     }
 
-    pub async fn start(mut self) {
+    pub async fn start(self) {
         self.run_pumps_as_copy().await;
     }
 
