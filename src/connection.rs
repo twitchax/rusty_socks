@@ -158,8 +158,9 @@ impl Connection {
         // Compute valid endpoint addresses, and connect to endpoint.
         
         let endpoint_socket = match endpoint_addr_iterator {
-            Ok(a) => {
-                let endpoint_addr = a.collect::<Vec<SocketAddr>>()[0];
+            Ok(addresses) => {
+                // [ARoney] TODO: Don't hardcode this to ipv4...
+                let endpoint_addr = addresses.into_iter().find(|a| a.is_ipv4()).unwrap();
 
                 match socket.connect(endpoint_addr).await {
                     Ok(s) => Some(s),
