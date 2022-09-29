@@ -1,10 +1,11 @@
-use std::fmt::Formatter;
+use std::{fmt::Formatter, net::SocketAddr};
 use std::fmt::Display;
 use std::error::Error;
 use rand::{self, Rng};
 use rand::distributions::Alphanumeric;
 
 use pnet::datalink;
+use tokio::net::TcpSocket;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
 pub enum Cidr {
@@ -19,6 +20,11 @@ impl Cidr {
             Cidr::V6(_, mask) => *mask == 0
         }
     }
+}
+
+pub struct EndpointPair {
+    pub socket: TcpSocket,
+    pub address: SocketAddr
 }
 
 pub struct Helpers;
@@ -159,6 +165,37 @@ impl Helpers {
                 Ok(Cidr::V6(prefix, mask))
             }
         }
+    }
+
+    pub fn create_local_socket(local_addr: SocketAddr, mut endpoint_addresses: impl Iterator<Item = SocketAddr>) -> Option<EndpointPair> {
+        let is_endpoint_interface_ipv6 = local_addr.is_ipv6();
+
+        let endpoint_addr = if is_endpoint_interface_ipv6 {
+            endpoint_addresses
+                .find(|a| a.is_ipv6())
+        } else {
+            endpoint_addresses
+                .find(|a| a.is_ipv4())
+        };
+
+        let endpoint_addr = match endpoint_addr {
+            Some(addr) => addr,
+            None => return None
+        };
+
+        // Bind to requested local address.
+        let socket = if endpoint_addr.is_ipv4() {
+            TcpSocket::new_v4().ok()?
+        } else {
+            TcpSocket::new_v6().ok()?
+        };
+
+        socket.bind(local_addr).ok()?;
+
+        Some(EndpointPair {
+            socket,
+            address: endpoint_addr
+        })
     }
 }
 

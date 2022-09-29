@@ -1,10 +1,10 @@
-use tokio::{io::AsyncReadExt, net::TcpSocket, task::JoinHandle};
+use tokio::{io::AsyncReadExt, task::JoinHandle};
 use tokio::net::{TcpStream};
 use tokio::io::AsyncWriteExt;
 
 use std::iter::IntoIterator;
 use std::str::FromStr;
-use std::net::{SocketAddr, IpAddr, ToSocketAddrs};
+use std::net::{SocketAddr, IpAddr};
 use log::{error, info, debug, warn};
 use phf::{Map, phf_map};
 
@@ -76,9 +76,8 @@ impl Connection {
 
         // Perform requested action.
 
-        let endpoint_socket: TcpStream;
-        match request.command {
-            0x01 /* CONNECT */ => endpoint_socket = Connection::establish_connect_request(&mut self.client_socket, &self.endpoint_interface, &request, buffer).await?,
+        let endpoint_socket = match request.command {
+            0x01 /* CONNECT */ => Connection::establish_connect_request(&mut self.client_socket, &self.endpoint_interface, &request, buffer).await?,
             0x02 /* BIND */ => return "BIND requests not supported.".into_error(),
             0x03 /* UDP ASSOCIATE */ => return "UDP ASSOCIATE requests not supported.".into_error(),
             _ => return "Unknown command type.".into_error()
@@ -96,7 +95,12 @@ impl Connection {
         // Run the pump (all errors in pumps are emitted as log messages and should not disrupt the execution flow).
 
         //CustomPump::from(&self.id, self.client_socket, endpoint_socket, buffer, self.read_timeout).start().await;
-        CopyPump::from(self.client_socket, endpoint_socket).start().await;
+        match CopyPump::from(self.client_socket, endpoint_socket, self.read_timeout).start().await {
+            Ok(_) => {},
+            Err(e) => {
+                warn!("[{}] The pump ended with and error.  {}", self.id, e);
+            }
+        }
 
         debug!("[{}] End.", self.id);
 
@@ -147,33 +151,36 @@ impl Connection {
         
         // Get endpoint address.
         let string_to_connect = format!("{}:{}", request.destination, request.port);
-        let endpoint_addr_iterator = dbg!(string_to_connect.to_socket_addrs());
+        let endpoint_addr_iterator = tokio::net::lookup_host(&string_to_connect).await;
 
         // Compute valid endpoint addresses, and connect to endpoint.
         let endpoint_socket = match endpoint_addr_iterator {
-            Ok(addresses) => {
-                // [ARoney] TODO: Don't hardcode this to ipv4...
-                let endpoint_addr = addresses.into_iter().find(|a| a.is_ipv4()).unwrap();
+            Ok(endpoint_addresses) => {
+                // Try to create a local socket that can connect to the endpoint.
+                match Helpers::create_local_socket(local_addr, endpoint_addresses) {
+                    Some(ep) => {
+                        let socket = ep.socket;
+                        let endpoint_addr = ep.address;
 
-                // Bind to requested local address.
-                let socket = if endpoint_addr.is_ipv4() {
-                    TcpSocket::new_v4()?
-                } else {
-                    TcpSocket::new_v6()?
-                };
+                        // Connect to endpoint.
+                        match socket.connect(endpoint_addr).await {
+                            Ok(s) => Some(s),
+                            Err(e) => {
+                                warn!("Could not connect to `{}` (`{}`).", string_to_connect, endpoint_addr);
+                                
+                                reply = match e.raw_os_error() {
+                                    Some(i) => Helpers::get_socks_reply(i),
+                                    _ => 5u8 // Connection refused?.
+                                };
 
-                socket.bind(local_addr)?;
-
-                // Connect to endpoint.
-                match socket.connect(endpoint_addr).await {
-                    Ok(s) => Some(s),
-                    Err(e) => {
-                        warn!("Could not connect to `{}` (`{}`).", string_to_connect, endpoint_addr);
+                                None
+                            }
+                        }
+                    },
+                    None => {
+                        warn!("Could not create local socket (`{}`) to `{}`. This likely means that we could not find a suitable address type for the endpoint that matches the endpoint interface type (i.e., IPv6/IPv4 mismatch).", local_addr, string_to_connect);
                         
-                        reply = match e.raw_os_error() {
-                            Some(i) => Helpers::get_socks_reply(i),
-                            _ => 5u8 // Connection refused?.
-                        };
+                        reply = 5u8; // Connection refused?.
 
                         None
                     }

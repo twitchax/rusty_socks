@@ -24,7 +24,7 @@ impl BufferPool {
         }
 
         // Or, create a new one.
-        if free_buffer_index == None {
+        if free_buffer_index.is_none() {
             free_buffer_index = Some(self.add_buffer());
         }
 

@@ -37,7 +37,7 @@ pub async fn from_file_and_env(file: Option<&str>) -> Res<Config> {
     let mut endpoint_interface: Option<String> = None;
     let mut port = 1080u16;
     let mut buffer_size = 2048usize;
-    let mut read_timeout = 5000u64;
+    let mut read_timeout = 60_000u64;
     let mut accept_cidr = "0.0.0.0/0".to_owned();
 
     // Compute the config values: file > env > default.
