@@ -98,7 +98,7 @@ impl Connection {
         match CopyPump::from(self.client_socket, endpoint_socket, self.read_timeout).start().await {
             Ok(_) => {},
             Err(e) => {
-                warn!("[{}] The pump ended with and error.  {}", self.id, e);
+                warn!("[{}] The pump ended with an error.  {}", self.id, e);
             }
         }
 
