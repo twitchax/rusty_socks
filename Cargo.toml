@@ -1,16 +1,41 @@
 [package]
 name = "rusty_socks"
-version = "2.1.0"
-authors = ["Aaron Roney <twitchax>"]
+version = "2.2.0"
+authors = ["Aaron Roney <twitchax@gmail.com>"]
 edition = "2024"
+description = "A super basic SOCKS5 proxy."
+license = "MIT"
+repository = "https://github.com/twitchax/rusty_socks"
+readme = "README.md"
+keywords = ["socks5", "socks", "proxy", "tokio", "networking"]
+categories = ["network-programming", "command-line-utilities"]
+
+[profile.release]
+codegen-units = 1
+lto = true
+
+[lib]
+name = "rusty_sockslib"
+path = "src/lib.rs"
+
+[[bin]]
+name = "rusty_socks"
+path = "src/bin.rs"
 
 [dependencies]
-rand = "0.10"
-futures = "0.3"
-pnet = "0.35"
-toml = "1"
-simple_logger = "5"
-log = { version = "0.4", features = ["release_max_level_info"] }
-phf = { version = "0.13", features = ["macros"] }
-serde = { version = "1", features = ["derive"] }
 tokio = { version = "1", features = ["full"] }
+clap = { version = "4", features = ["derive", "env"] }
+tracing = { version = "0.1", features = ["log"] }
+tracing-subscriber = { version = "0.3", features = ["fmt", "ansi", "env-filter"] }
+rand = "0.10"
+pnet = "0.35"
+futures = "0.3"
+phf = { version = "0.13", features = ["macros"] }
+
+[dev-dependencies]
+pretty_assertions = "1"
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "benchmarks"
+harness = false

@@ -1,31 +1,37 @@
-use tokio::{io::AsyncReadExt, task::JoinHandle};
-use tokio::net::{TcpStream};
 use tokio::io::AsyncWriteExt;
+use tokio::net::TcpStream;
+use tokio::{io::AsyncReadExt, task::JoinHandle};
 
-use std::iter::IntoIterator;
-use std::str::FromStr;
-use std::net::{SocketAddr, IpAddr};
-use log::{error, info, debug, warn};
 use phf::{Map, phf_map};
+use std::iter::IntoIterator;
+use std::net::{IpAddr, SocketAddr};
+use std::str::FromStr;
+use tracing::{debug, error, info, warn};
 
 use crate::handshake::Handshake;
-use crate::helpers::{Helpers, Res, Void, IntoError};
-use crate::request::{Request, Destination};
+use crate::helpers::{Helpers, IntoError, Res, Void};
+use crate::request::{Destination, Request};
 //use crate::custom_pump::CustomPump;
-use crate::copy_pump::CopyPump;
 use crate::buffer_pool::Buffer;
+use crate::copy_pump::CopyPump;
 
 pub struct Connection {
     id: String,
     client_socket: TcpStream,
     endpoint_interface: String,
-    buffer: Buffer, 
-    read_timeout: u64
+    buffer: Buffer,
+    read_timeout: u64,
 }
 
 impl Connection {
     pub fn from(client_socket: TcpStream, endpoint_interface: String, buffer: Buffer, read_timeout: u64) -> Self {
-        Connection { id: Helpers::get_id(), client_socket, endpoint_interface, buffer, read_timeout }
+        Connection {
+            id: Helpers::get_id(),
+            client_socket,
+            endpoint_interface,
+            buffer,
+            read_timeout,
+        }
     }
 
     // `self` Connection is moved when the handle method is called, and ownership is given
@@ -36,7 +42,7 @@ impl Connection {
         // Move self into the spawned thread, as well.
         tokio::spawn(async move {
             match self.handle_task().await {
-                Ok(_) => {},
+                Ok(_) => {}
                 Err(e) => {
                     error!("{}", e);
                 }
@@ -64,7 +70,7 @@ impl Connection {
         let destination = match &request.destination {
             Destination::Ipv4Addr(ipv4) => ipv4.to_string(),
             Destination::Ipv6Addr(ipv6) => ipv6.to_string(),
-            Destination::Domain(s) => s.to_owned()
+            Destination::Domain(s) => s.to_owned(),
         };
 
         debug!("[{}]   Request:", self.id);
@@ -96,7 +102,7 @@ impl Connection {
 
         //CustomPump::from(&self.id, self.client_socket, endpoint_socket, buffer, self.read_timeout).start().await;
         match CopyPump::from(self.client_socket, endpoint_socket, self.read_timeout).start().await {
-            Ok(_) => {},
+            Ok(_) => {}
             Err(e) => {
                 warn!("[{}] The pump ended with an error.  {}", self.id, e);
             }
@@ -148,7 +154,7 @@ impl Connection {
 
         // Get requested local interface.
         let local_addr = SocketAddr::from_str(&format!("{}:{}", endpoint_interface, 0))?;
-        
+
         // Get endpoint address.
         let string_to_connect = format!("{}:{}", request.destination, request.port);
         let endpoint_addr_iterator = tokio::net::lookup_host(&string_to_connect).await;
@@ -167,37 +173,40 @@ impl Connection {
                             Ok(s) => Some(s),
                             Err(e) => {
                                 warn!("Could not connect to `{}` (`{}`).", string_to_connect, endpoint_addr);
-                                
+
                                 reply = match e.raw_os_error() {
                                     Some(i) => Helpers::get_socks_reply(i),
-                                    _ => 5u8 // Connection refused?.
+                                    _ => 5u8, // Connection refused?.
                                 };
 
                                 None
                             }
                         }
-                    },
+                    }
                     None => {
-                        warn!("Could not create local socket (`{}`) to `{}`. This likely means that we could not find a suitable address type for the endpoint that matches the endpoint interface type (i.e., IPv6/IPv4 mismatch).", local_addr, string_to_connect);
-                        
+                        warn!(
+                            "Could not create local socket (`{}`) to `{}`. This likely means that we could not find a suitable address type for the endpoint that matches the endpoint interface type (i.e., IPv6/IPv4 mismatch).",
+                            local_addr, string_to_connect
+                        );
+
                         reply = 5u8; // Connection refused?.
 
                         None
                     }
                 }
-            },
+            }
             Err(e) => {
                 warn!("Could not compute an endpoint address for `{}`.", string_to_connect);
-                
+
                 reply = match e.raw_os_error() {
                     Some(i) => Helpers::get_socks_reply(i),
-                    _ => 8u8 // Address type not supported.
+                    _ => 8u8, // Address type not supported.
                 };
 
                 None
             }
         };
-        
+
         // Get the local IP and port.
         let local_ip = local_addr.ip();
         let (port_high, port_low) = Helpers::port_to_bytes(local_addr.port());
@@ -213,14 +222,17 @@ impl Connection {
                 let octets = ipv4.octets();
 
                 buffer[3] = 0x01; // ADDRESS TYPE (IPv4).
-                buffer[4] = octets[0]; buffer[5] = octets[1]; buffer[6] = octets[2]; buffer[7] = octets[3];
+                buffer[4] = octets[0];
+                buffer[5] = octets[1];
+                buffer[6] = octets[2];
+                buffer[7] = octets[3];
                 Helpers::write_octets(&mut buffer[4..8], &octets);
 
                 buffer[8] = port_high;
                 buffer[9] = port_low;
 
                 10
-            },
+            }
             IpAddr::V6(ipv6) => {
                 let octets = ipv6.octets();
 
@@ -240,11 +252,11 @@ impl Connection {
         client_socket.flush().await?;
 
         // In a failure scenario, ensure the SOCKS process does not continue.
-        
+
         if reply != 0 {
             return format!("The connection to `{}` failed gracefully with `{}`.", string_to_connect, ERRORS[&reply]).into_error();
         }
-        
+
         // This should only be `None` if there is an error, which aborts above.
         Ok(endpoint_socket.unwrap())
     }

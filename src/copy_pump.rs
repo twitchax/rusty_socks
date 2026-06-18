@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use futures::{pin_mut, future::Either};
+use futures::{future::Either, pin_mut};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::time::timeout;
@@ -10,12 +10,16 @@ use crate::helpers::{IntoError, Res};
 pub struct CopyPump {
     client_socket: TcpStream,
     endpoint_socket: TcpStream,
-    read_timeout: u64
+    read_timeout: u64,
 }
 
 impl CopyPump {
     pub fn from(client_socket: TcpStream, endpoint_socket: TcpStream, read_timeout: u64) -> Self {
-        CopyPump { client_socket, endpoint_socket, read_timeout }
+        CopyPump {
+            client_socket,
+            endpoint_socket,
+            read_timeout,
+        }
     }
 
     pub async fn start(self) -> Res<()> {
@@ -32,7 +36,7 @@ impl CopyPump {
         // disables the idle timeout entirely.
         let idle = match self.read_timeout {
             0 => None,
-            ms => Some(Duration::from_millis(ms))
+            ms => Some(Duration::from_millis(ms)),
         };
 
         let pump_up = Self::pump(&mut client_socket_read, &mut endpoint_socket_write, idle);
@@ -44,7 +48,7 @@ impl CopyPump {
         // The connection is finished as soon as either direction ends (EOF, error, or idle);
         // dropping the surviving pump closes the other half of the connection.
         match futures::future::select(pump_up, pump_down).await {
-            Either::Left((result, _)) | Either::Right((result, _)) => result
+            Either::Left((result, _)) | Either::Right((result, _)) => result,
         }
     }
 
@@ -54,7 +58,7 @@ impl CopyPump {
     async fn pump<R, W>(from: &mut R, to: &mut W, idle: Option<Duration>) -> Res<()>
     where
         R: AsyncRead + Unpin,
-        W: AsyncWrite + Unpin
+        W: AsyncWrite + Unpin,
     {
         let mut buffer = [0u8; 16 * 1024];
 
@@ -62,9 +66,9 @@ impl CopyPump {
             let read = match idle {
                 Some(duration) => match timeout(duration, from.read(&mut buffer)).await {
                     Ok(result) => result?,
-                    Err(_) => return "Idle timeout.".into_error()
+                    Err(_) => return "Idle timeout.".into_error(),
                 },
-                None => from.read(&mut buffer).await?
+                None => from.read(&mut buffer).await?,
             };
 
             // A zero-length read is a clean half-close from the peer.
@@ -82,7 +86,7 @@ impl CopyPump {
 mod tests {
     use super::CopyPump;
     use std::time::Duration;
-    use tokio::io::{duplex, AsyncReadExt, AsyncWriteExt};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt, duplex};
     use tokio::time::{sleep, timeout};
 
     // The regression guard for the 60s hard-cap bug: a connection that keeps moving data must
@@ -113,7 +117,7 @@ mod tests {
             while total < 10 {
                 match drain.read(&mut buf).await {
                     Ok(0) | Err(_) => break,
-                    Ok(n) => total += n
+                    Ok(n) => total += n,
                 }
             }
             total
@@ -123,10 +127,9 @@ mod tests {
 
         // Run the pump and its driver concurrently on one task (a boxed-error `Result` isn't
         // `Send`, so it can't cross a `tokio::spawn` boundary — `join!` keeps it local).
-        let (pump_result, (), received) =
-            timeout(Duration::from_secs(5), async { tokio::join!(pump, writer, reader) })
-                .await
-                .expect("pump + driver should finish well within 5s");
+        let (pump_result, (), received) = timeout(Duration::from_secs(5), async { tokio::join!(pump, writer, reader) })
+            .await
+            .expect("pump + driver should finish well within 5s");
 
         assert!(pump_result.is_ok(), "active connection was killed: {:?}", pump_result.err());
         assert_eq!(received, 10, "all bytes should have been pumped through");
@@ -155,11 +158,7 @@ mod tests {
 
         // With the timeout disabled the pump stays blocked on the read, so the *outer* bound is
         // what trips — i.e. the pump itself never returned.
-        let outcome = timeout(
-            Duration::from_millis(300),
-            CopyPump::pump(&mut from, &mut to, None)
-        )
-        .await;
+        let outcome = timeout(Duration::from_millis(300), CopyPump::pump(&mut from, &mut to, None)).await;
 
         assert!(outcome.is_err(), "with idle disabled the pump must keep waiting, not return");
     }

@@ -1,0 +1,42 @@
+[config]
+default_to_workspace = false
+
+[tasks.format]
+description = "Format the code."
+command = "cargo"
+args = ["fmt"]
+
+[tasks.format-check]
+description = "Check formatting without modifying files."
+command = "cargo"
+args = ["fmt", "--", "--check"]
+
+[tasks.clippy]
+description = "Lint with clippy, treating warnings as errors."
+command = "cargo"
+args = ["clippy", "--all-targets", "--", "-D", "warnings"]
+
+[tasks.test]
+description = "Run the test suite with nextest."
+command = "cargo"
+args = ["nextest", "run"]
+
+[tasks.cov]
+description = "Run tests with coverage."
+command = "cargo"
+args = ["llvm-cov", "nextest", "--workspace"]
+
+[tasks.build-release]
+description = "Build an optimized release binary."
+command = "cargo"
+args = ["build", "--release"]
+
+[tasks.ci]
+description = "Everything CI runs: format check, clippy, tests."
+dependencies = ["format-check", "clippy", "test"]
+
+[tasks.release]
+description = "Run all checks, then publish to crates.io (requires `cargo login`)."
+dependencies = ["format-check", "clippy", "test"]
+command = "cargo"
+args = ["publish"]

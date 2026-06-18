@@ -1,0 +1,106 @@
+on: [push]
+
+name: Build and Test
+
+jobs:
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-all-crates: "true"
+      - uses: cargo-bins/cargo-binstall@main
+      - run: cargo binstall -y cargo-nextest
+      - run: cargo nextest run
+
+  codecov:
+    needs: test
+    name: Code Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-all-crates: "true"
+      - uses: cargo-bins/cargo-binstall@main
+      - run: cargo binstall -y cargo-llvm-cov cargo-nextest
+      - run: cargo llvm-cov nextest --workspace --lcov --output-path coverage.lcov
+      - uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: twitchax/rusty_socks
+
+  release_linux:
+    needs: test
+    name: Release Linux
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release --target x86_64-unknown-linux-gnu
+      - name: Package
+        run: zip -j rusty_socks_x86_64-unknown-linux-gnu.zip target/x86_64-unknown-linux-gnu/release/rusty_socks
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: rusty_socks_x86_64-unknown-linux-gnu.zip
+
+  release_windows:
+    needs: test
+    name: Release Windows
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install mingw-w64
+        run: sudo apt-get update && sudo apt-get install -y mingw-w64
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-gnu
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-all-crates: "true"
+      - uses: cargo-bins/cargo-binstall@main
+      - run: cargo binstall -y cross
+      - run: cross build --release --target x86_64-pc-windows-gnu
+      - name: Package
+        run: zip -j rusty_socks_x86_64-pc-windows-gnu.zip target/x86_64-pc-windows-gnu/release/rusty_socks.exe
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: rusty_socks_x86_64-pc-windows-gnu.zip
+
+  release_macos:
+    needs: test
+    name: Release macOS
+    runs-on: macos-15
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-all-crates: "true"
+      - run: cargo build --release --target aarch64-apple-darwin
+      - name: Package
+        run: zip -j rusty_socks_aarch64-apple-darwin.zip target/aarch64-apple-darwin/release/rusty_socks
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: rusty_socks_aarch64-apple-darwin.zip

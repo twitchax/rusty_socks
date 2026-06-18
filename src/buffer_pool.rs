@@ -3,12 +3,15 @@ use tokio::sync::{Mutex, MutexGuard};
 
 pub struct BufferPool {
     buffer_size: usize,
-    buffers: Vec<Arc<Mutex<Vec<u8>>>>
+    buffers: Vec<Arc<Mutex<Vec<u8>>>>,
 }
 
 impl BufferPool {
     pub fn new(buffer_size: usize) -> Self {
-        BufferPool { buffer_size, buffers: Vec::<Arc<Mutex<Vec<u8>>>>::new() }
+        BufferPool {
+            buffer_size,
+            buffers: Vec::<Arc<Mutex<Vec<u8>>>>::new(),
+        }
     }
 
     pub fn lease(&mut self) -> Buffer {
@@ -20,7 +23,7 @@ impl BufferPool {
             if ref_count < 2 {
                 free_buffer_index = Some(k);
                 break;
-            } 
+            }
         }
 
         // Or, create a new one.
@@ -51,7 +54,7 @@ impl BufferPool {
 }
 
 pub struct Buffer {
-    buffer: Arc<Mutex<Vec<u8>>>
+    buffer: Arc<Mutex<Vec<u8>>>,
 }
 
 impl Buffer {
@@ -61,5 +64,41 @@ impl Buffer {
 
     pub async fn get(&mut self) -> MutexGuard<'_, Vec<u8>> {
         self.buffer.lock().await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pretty_assertions::assert_eq;
+
+    #[test]
+    fn lease_reuses_freed_buffers() {
+        let mut pool = BufferPool::new(1024);
+        assert_eq!(pool.total_count(), 0);
+
+        let a = pool.lease();
+        assert_eq!(pool.leased_count(), 1);
+        assert_eq!(pool.total_count(), 1);
+
+        // A second concurrent lease must allocate a new buffer.
+        let b = pool.lease();
+        assert_eq!(pool.total_count(), 2);
+
+        // Dropping frees them; a subsequent lease reuses rather than growing the pool.
+        drop(a);
+        drop(b);
+        assert_eq!(pool.leased_count(), 0);
+
+        let _c = pool.lease();
+        assert_eq!(pool.leased_count(), 1);
+        assert_eq!(pool.total_count(), 2);
+    }
+
+    #[tokio::test]
+    async fn leased_buffer_has_requested_size() {
+        let mut pool = BufferPool::new(1500);
+        let mut buffer = pool.lease();
+        assert_eq!(buffer.get().await.len(), 1500);
     }
 }
