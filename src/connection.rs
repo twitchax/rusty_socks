@@ -120,7 +120,7 @@ impl Connection {
             return "Read 0 bytes during handshake.".into_error();
         }
 
-        let handshake = Handshake::from_data(buffer);
+        let handshake = Handshake::from_data(buffer)?;
 
         if handshake.version != 5 {
             return "Bad SOCKS version.".into_error();

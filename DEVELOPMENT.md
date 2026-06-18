@@ -18,5 +18,4 @@ cargo make release   # run all checks, then publish to crates.io (needs `cargo l
 ## TODO
 
 - IPv6 listen / endpoint interface support.
-- Bounds-check `Request::from_data` / `Handshake::from_data` against malformed or short input (they currently index directly, which panics and aborts that single connection task).
 - More connection-lifecycle tests (idle reaping over real sockets, CIDR rejection paths).
