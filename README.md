@@ -9,7 +9,7 @@
 
 A super basic SOCKS5 proxy, written in Rust on `tokio`.
 
-> Published on crates.io as [`rsocks`](https://crates.io/crates/rsocks) — the `rusty_socks` name was already taken by an unrelated crate. The repo, binary, and Docker image stay `rusty_socks`.
+> Published on crates.io as [`rsocks`](https://crates.io/crates/rsocks) (and the binary is `rsocks`) — the `rusty_socks` name was already taken by an unrelated crate. The GitHub repo and Docker image stay `rusty_socks`.
 
 `rusty_socks` is a small, no-frills SOCKS5 (`CONNECT`) proxy: point a browser, an `ssh` `ProxyCommand`, or anything else SOCKS5-aware at it and it relays TCP to the requested destination. It adds a CIDR allow-list, a reset-on-activity idle timeout, and optional binding to specific network interfaces — and nothing else.
 
@@ -18,16 +18,16 @@ A super basic SOCKS5 proxy, written in Rust on `tokio`.
 Run with defaults (listen on `0.0.0.0:1080`, accept every client):
 
 ```bash
-$ rusty_socks
+$ rsocks
 ```
 
 Every option is available as a CLI flag **or** its `RS_*` environment variable (flags win):
 
 ```bash
-$ rusty_socks --help
+$ rsocks --help
 A super basic SOCKS5 proxy.
 
-Usage: rusty_socks [OPTIONS]
+Usage: rsocks [OPTIONS]
 
 Options:
       --listen-interface <LISTEN_INTERFACE>
@@ -59,11 +59,11 @@ Options:
 | `--read-timeout` | `RS_READ_TIMEOUT` | `60000` | **Idle** timeout (ms); the clock resets on every byte, so only genuinely silent connections are reaped. `0` disables it. |
 | `--accept-cidr` | `RS_ACCEPT_CIDR` | `0.0.0.0/0` | CIDR of client addresses allowed to connect. |
 
-Logging uses [`tracing`](https://docs.rs/tracing); set `RUST_LOG` to change the level (e.g. `RUST_LOG=rusty_sockslib=debug`).
+Logging uses [`tracing`](https://docs.rs/tracing); set `RUST_LOG` to change the level (e.g. `RUST_LOG=rsocks=debug`).
 
 ### As a browser proxy
 
-Run `rusty_socks` on a host that can reach where you want to go, then set your browser's SOCKS host to `host:1080` (SOCKS v5). All browser TCP traffic is relayed through it — the generic, any-destination case SOCKS5 is built for.
+Run `rsocks` on a host that can reach where you want to go, then set your browser's SOCKS host to `host:1080` (SOCKS v5). All browser TCP traffic is relayed through it — the generic, any-destination case SOCKS5 is built for.
 
 ### As an `ssh` hop
 
@@ -82,24 +82,24 @@ Host myhost
 Linux:
 
 ```bash
-$ curl -LO https://github.com/twitchax/rusty_socks/releases/latest/download/rusty_socks_x86_64-unknown-linux-gnu.zip
-$ unzip rusty_socks_x86_64-unknown-linux-gnu.zip -d /usr/local/bin
-$ chmod a+x /usr/local/bin/rusty_socks
+$ curl -LO https://github.com/twitchax/rusty_socks/releases/latest/download/rsocks_x86_64-unknown-linux-gnu.zip
+$ unzip rsocks_x86_64-unknown-linux-gnu.zip -d /usr/local/bin
+$ chmod a+x /usr/local/bin/rsocks
 ```
 
 macOS (Apple Silicon):
 
 ```bash
-$ curl -LO https://github.com/twitchax/rusty_socks/releases/latest/download/rusty_socks_aarch64-apple-darwin.zip
-$ unzip rusty_socks_aarch64-apple-darwin.zip -d /usr/local/bin
-$ chmod a+x /usr/local/bin/rusty_socks
+$ curl -LO https://github.com/twitchax/rusty_socks/releases/latest/download/rsocks_aarch64-apple-darwin.zip
+$ unzip rsocks_aarch64-apple-darwin.zip -d /usr/local/bin
+$ chmod a+x /usr/local/bin/rsocks
 ```
 
 Windows:
 
 ```powershell
-$ iwr https://github.com/twitchax/rusty_socks/releases/latest/download/rusty_socks_x86_64-pc-windows-gnu.zip -OutFile rusty_socks.zip
-$ Expand-Archive rusty_socks.zip -DestinationPath C:\Users\%USERNAME%\AppData\Local\Programs\rusty_socks
+$ iwr https://github.com/twitchax/rusty_socks/releases/latest/download/rsocks_x86_64-pc-windows-gnu.zip -OutFile rsocks.zip
+$ Expand-Archive rsocks.zip -DestinationPath C:\Users\%USERNAME%\AppData\Local\Programs\rsocks
 ```
 
 Cargo:

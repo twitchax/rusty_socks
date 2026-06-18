@@ -54,10 +54,10 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo build --release --target x86_64-unknown-linux-gnu
       - name: Package
-        run: zip -j rusty_socks_x86_64-unknown-linux-gnu.zip target/x86_64-unknown-linux-gnu/release/rusty_socks
+        run: zip -j rsocks_x86_64-unknown-linux-gnu.zip target/x86_64-unknown-linux-gnu/release/rsocks
       - uses: softprops/action-gh-release@v2
         with:
-          files: rusty_socks_x86_64-unknown-linux-gnu.zip
+          files: rsocks_x86_64-unknown-linux-gnu.zip
 
   release_windows:
     needs: test
@@ -79,10 +79,10 @@ jobs:
       - run: cargo binstall -y cross
       - run: cross build --release --target x86_64-pc-windows-gnu
       - name: Package
-        run: zip -j rusty_socks_x86_64-pc-windows-gnu.zip target/x86_64-pc-windows-gnu/release/rusty_socks.exe
+        run: zip -j rsocks_x86_64-pc-windows-gnu.zip target/x86_64-pc-windows-gnu/release/rsocks.exe
       - uses: softprops/action-gh-release@v2
         with:
-          files: rusty_socks_x86_64-pc-windows-gnu.zip
+          files: rsocks_x86_64-pc-windows-gnu.zip
 
   release_macos:
     needs: test
@@ -102,7 +102,7 @@ jobs:
           cache-bin: false
       - run: cargo build --release --target aarch64-apple-darwin
       - name: Package
-        run: zip -j rusty_socks_aarch64-apple-darwin.zip target/aarch64-apple-darwin/release/rusty_socks
+        run: zip -j rsocks_aarch64-apple-darwin.zip target/aarch64-apple-darwin/release/rsocks
       - uses: softprops/action-gh-release@v2
         with:
-          files: rusty_socks_aarch64-apple-darwin.zip
+          files: rsocks_aarch64-apple-darwin.zip

@@ -6,7 +6,7 @@ use crate::helpers::{Helpers, Res};
 ///
 /// Every option can be supplied as a CLI flag or via its `RS_*` environment variable; flags win.
 #[derive(Parser, Debug, Clone)]
-#[command(name = "rusty_socks", version, about, long_about = None)]
+#[command(name = "rsocks", version, about, long_about = None)]
 pub struct Config {
     /// Network interface whose IP the proxy listens on (defaults to `0.0.0.0`).
     #[arg(long, env = "RS_LISTEN_INTERFACE")]
@@ -61,7 +61,7 @@ mod tests {
 
     #[test]
     fn cli_flags_override_defaults() {
-        let config = Config::parse_from(["rusty_socks", "--port", "9050", "--read-timeout", "0", "--accept-cidr", "10.0.0.0/8"]);
+        let config = Config::parse_from(["rsocks", "--port", "9050", "--read-timeout", "0", "--accept-cidr", "10.0.0.0/8"]);
 
         assert_eq!(config.port, 9050);
         assert_eq!(config.read_timeout, 0);
@@ -70,7 +70,7 @@ mod tests {
 
     #[test]
     fn unspecified_interface_resolves_to_wildcard() {
-        let config = Config::parse_from(["rusty_socks", "--port", "1"]);
+        let config = Config::parse_from(["rsocks", "--port", "1"]);
 
         assert_eq!(config.listen_ip().unwrap(), "0.0.0.0");
         assert_eq!(config.endpoint_ip().unwrap(), "0.0.0.0");

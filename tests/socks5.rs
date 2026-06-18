@@ -8,8 +8,8 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::time::timeout;
 
-use rusty_sockslib::config::Config;
-use rusty_sockslib::serve;
+use rsocks::config::Config;
+use rsocks::serve;
 
 /// Bind a loopback TCP echo server and return its address.
 async fn spawn_echo() -> SocketAddr {

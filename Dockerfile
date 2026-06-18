@@ -13,9 +13,9 @@ COPY --from=planner /build/recipe.json recipe.json
 RUN cargo chef cook --release --recipe-path recipe.json
 # Build the application against the cached dependency layer.
 COPY . .
-RUN cargo build --release --bin rusty_socks
+RUN cargo build --release --bin rsocks
 
 FROM debian:stable-slim AS runtime
-COPY --from=builder /build/target/release/rusty_socks /usr/local/bin/rusty_socks
+COPY --from=builder /build/target/release/rsocks /usr/local/bin/rsocks
 # Configure via CLI flags or RS_* env vars, e.g. `docker run -e RS_PORT=1080 -e RS_ACCEPT_CIDR=10.0.0.0/8 ...`.
-ENTRYPOINT ["rusty_socks"]
+ENTRYPOINT ["rsocks"]

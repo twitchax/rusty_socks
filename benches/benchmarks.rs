@@ -1,7 +1,7 @@
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
 
-use rusty_sockslib::handshake::Handshake;
-use rusty_sockslib::request::Request;
+use rsocks::handshake::Handshake;
+use rsocks::request::Request;
 
 fn bench_handshake(c: &mut Criterion) {
     // VER=5, NMETHODS=1, METHODS=[NO AUTH].
