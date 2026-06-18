@@ -1,5 +1,5 @@
 [package]
-name = "rusty_socks"
+name = "rsocks"
 version = "2.2.0"
 authors = ["Aaron Roney <twitchax@gmail.com>"]
 edition = "2024"

@@ -1,13 +1,15 @@
 [![Build and Test](https://github.com/twitchax/rusty_socks/actions/workflows/build.yml/badge.svg)](https://github.com/twitchax/rusty_socks/actions/workflows/build.yml)
 [![codecov](https://codecov.io/gh/twitchax/rusty_socks/branch/master/graph/badge.svg)](https://codecov.io/gh/twitchax/rusty_socks)
-[![Version](https://img.shields.io/crates/v/rusty_socks.svg)](https://crates.io/crates/rusty_socks)
-[![Crates.io](https://img.shields.io/crates/d/rusty_socks?label=crate)](https://crates.io/crates/rusty_socks)
+[![Version](https://img.shields.io/crates/v/rsocks.svg)](https://crates.io/crates/rsocks)
+[![Crates.io](https://img.shields.io/crates/d/rsocks?label=crate)](https://crates.io/crates/rsocks)
 [![GitHub all releases](https://img.shields.io/github/downloads/twitchax/rusty_socks/total?label=binary)](https://github.com/twitchax/rusty_socks/releases)
 [![License:MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 # rusty_socks
 
 A super basic SOCKS5 proxy, written in Rust on `tokio`.
+
+> Published on crates.io as [`rsocks`](https://crates.io/crates/rsocks) — the `rusty_socks` name was already taken by an unrelated crate. The repo, binary, and Docker image stay `rusty_socks`.
 
 `rusty_socks` is a small, no-frills SOCKS5 (`CONNECT`) proxy: point a browser, an `ssh` `ProxyCommand`, or anything else SOCKS5-aware at it and it relays TCP to the requested destination. It adds a CIDR allow-list, a reset-on-activity idle timeout, and optional binding to specific network interfaces — and nothing else.
 
@@ -103,7 +105,7 @@ $ Expand-Archive rusty_socks.zip -DestinationPath C:\Users\%USERNAME%\AppData\Lo
 Cargo:
 
 ```bash
-$ cargo install rusty_socks
+$ cargo install rsocks
 ```
 
 ## Docker
