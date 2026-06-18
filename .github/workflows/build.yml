@@ -13,6 +13,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-all-crates: "true"
+          cache-bin: false
       - uses: cargo-bins/cargo-binstall@main
       - run: cargo binstall -y cargo-nextest
       - run: cargo nextest run
@@ -29,6 +30,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-all-crates: "true"
+          cache-bin: false
       - uses: cargo-bins/cargo-binstall@main
       - run: cargo binstall -y cargo-llvm-cov cargo-nextest
       - run: cargo llvm-cov nextest --workspace --lcov --output-path coverage.lcov
@@ -74,6 +76,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-all-crates: "true"
+          cache-bin: false
       - uses: cargo-bins/cargo-binstall@main
       - run: cargo binstall -y cross
       - run: cross build --release --target x86_64-pc-windows-gnu
@@ -98,6 +101,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-all-crates: "true"
+          cache-bin: false
       - run: cargo build --release --target aarch64-apple-darwin
       - name: Package
         run: zip -j rusty_socks_aarch64-apple-darwin.zip target/aarch64-apple-darwin/release/rusty_socks
