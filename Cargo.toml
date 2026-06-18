@@ -1,17 +1,16 @@
 [package]
 name = "rusty_socks"
-version = "0.0.1"
+version = "2.1.0"
 authors = ["Aaron Roney <twitchax>"]
-edition = "2018"
+edition = "2024"
 
 [dependencies]
-rand = "0.7.2"
-net2 = "0.2.33"
-futures = "0.3.16"
-pnet = "0.28.0"
-toml = "0.5.5"
-simple_logger = "1.0.1"
-log = { version = "0.4.8", features = ["release_max_level_info"] }
-phf = { version = "0.8.0", features = ["macros"] }
-serde = { version = "1.0.104", features = ["derive"] }
-tokio = { version = "1.21.2", features = ["full"] }
+rand = "0.10"
+futures = "0.3"
+pnet = "0.35"
+toml = "1"
+simple_logger = "5"
+log = { version = "0.4", features = ["release_max_level_info"] }
+phf = { version = "0.13", features = ["macros"] }
+serde = { version = "1", features = ["derive"] }
+tokio = { version = "1", features = ["full"] }

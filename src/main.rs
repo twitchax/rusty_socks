@@ -32,11 +32,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let config = config::from_file_and_env(config_file).await?;
     
-    // Set the log level.
-    simple_logger::init().unwrap();
-    log::set_max_level(LevelFilter::Info);
+    // Set up logging at info level.
+    simple_logger::SimpleLogger::new()
+        .with_level(LevelFilter::Info)
+        .init()
+        .unwrap();
     
-    info!("Version:      2.0.0");
+    info!("Version:      {}", env!("CARGO_PKG_VERSION"));
     info!("Listen IP:    {}", config.listen_ip);
     info!("Endpoint IP:  {}", config.endpoint_ip);
     info!("Port:         {}", config.port);

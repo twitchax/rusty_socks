@@ -1,8 +1,8 @@
 use std::{fmt::Formatter, net::SocketAddr};
 use std::fmt::Display;
 use std::error::Error;
-use rand::{self, Rng};
-use rand::distributions::Alphanumeric;
+use rand::RngExt;
+use rand::distr::Alphanumeric;
 
 use pnet::datalink;
 use tokio::net::TcpSocket;
@@ -31,9 +31,10 @@ pub struct Helpers;
 
 impl Helpers {
     pub fn get_id() -> String {
-        rand::thread_rng()
-            .sample_iter(&Alphanumeric)
+        rand::rng()
+            .sample_iter(Alphanumeric)
             .take(4)
+            .map(char::from)
             .collect::<String>()
     }
 
