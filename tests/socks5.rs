@@ -37,25 +37,36 @@ async fn spawn_echo() -> SocketAddr {
     addr
 }
 
-/// Bind the proxy on an ephemeral loopback port and serve it in the background.
-async fn spawn_proxy() -> SocketAddr {
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
-
-    let config = Config {
+/// A default proxy config bound to an ephemeral port (the `port` field is unused: `serve` is
+/// handed an already-bound listener). Tests override individual fields via `..proxy_config()`.
+fn proxy_config() -> Config {
+    Config {
         listen_interface: None,
         endpoint_interface: None,
-        port: 0, // unused: `serve` is handed an already-bound listener
+        port: 0,
         buffer_size: 2048,
         read_timeout: 60_000,
         accept_cidr: "0.0.0.0/0".to_owned(),
-    };
+        username: None,
+        password: None,
+    }
+}
+
+/// Bind the proxy on an ephemeral loopback port and serve `config` in the background.
+async fn spawn_proxy_with(config: Config) -> SocketAddr {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
 
     tokio::spawn(async move {
         let _ = serve(listener, config).await;
     });
 
     addr
+}
+
+/// Bind the proxy with the default (no-auth) config.
+async fn spawn_proxy() -> SocketAddr {
+    spawn_proxy_with(proxy_config()).await
 }
 
 #[tokio::test]
@@ -96,4 +107,107 @@ async fn socks5_connect_pumps_data_end_to_end() {
     };
 
     timeout(Duration::from_secs(5), body).await.expect("end-to-end flow should complete within 5s");
+}
+
+#[tokio::test]
+async fn socks5_userpass_auth_succeeds_then_pumps_data() {
+    let echo_addr = spawn_echo().await;
+    let proxy_addr = spawn_proxy_with(Config {
+        username: Some("bob".to_owned()),
+        password: Some("s3cret".to_owned()),
+        ..proxy_config()
+    })
+    .await;
+
+    let body = async {
+        let mut client = TcpStream::connect(proxy_addr).await.unwrap();
+
+        // Greeting offers NO_AUTH + USER_PASS; server must select USER_PASS.
+        client.write_all(&[0x05, 0x02, 0x00, 0x02]).await.unwrap();
+        let mut method = [0u8; 2];
+        client.read_exact(&mut method).await.unwrap();
+        assert_eq!(method, [0x05, 0x02], "server should select USER_PASS");
+
+        // RFC 1929 sub-negotiation: VER=1, ULEN=3 "bob", PLEN=6 "s3cret"; expect status [1, 0].
+        client.write_all(&[0x01, 0x03, b'b', b'o', b'b', 0x06, b's', b'3', b'c', b'r', b'e', b't']).await.unwrap();
+        let mut status = [0u8; 2];
+        client.read_exact(&mut status).await.unwrap();
+        assert_eq!(status, [0x01, 0x00], "server should accept correct credentials");
+
+        // After auth, a normal CONNECT should pump data end-to-end.
+        let ip = match echo_addr.ip() {
+            IpAddr::V4(v4) => v4.octets(),
+            IpAddr::V6(_) => unreachable!("loopback bind is v4"),
+        };
+        let port = echo_addr.port();
+        let request = [0x05, 0x01, 0x00, 0x01, ip[0], ip[1], ip[2], ip[3], (port >> 8) as u8, (port & 0xff) as u8];
+        client.write_all(&request).await.unwrap();
+        let mut reply = [0u8; 10];
+        client.read_exact(&mut reply).await.unwrap();
+        assert_eq!(reply[1], 0x00, "CONNECT should succeed after auth");
+
+        let payload = b"hello rusty_socks";
+        client.write_all(payload).await.unwrap();
+        let mut echoed = [0u8; 17];
+        client.read_exact(&mut echoed).await.unwrap();
+        assert_eq!(&echoed, payload, "payload should round-trip after auth");
+    };
+
+    timeout(Duration::from_secs(5), body).await.expect("authenticated flow should complete within 5s");
+}
+
+#[tokio::test]
+async fn socks5_userpass_auth_rejects_bad_credentials() {
+    let proxy_addr = spawn_proxy_with(Config {
+        username: Some("bob".to_owned()),
+        password: Some("s3cret".to_owned()),
+        ..proxy_config()
+    })
+    .await;
+
+    let body = async {
+        let mut client = TcpStream::connect(proxy_addr).await.unwrap();
+
+        client.write_all(&[0x05, 0x02, 0x00, 0x02]).await.unwrap();
+        let mut method = [0u8; 2];
+        client.read_exact(&mut method).await.unwrap();
+        assert_eq!(method, [0x05, 0x02]);
+
+        // Wrong password.
+        client.write_all(&[0x01, 0x03, b'b', b'o', b'b', 0x05, b'w', b'r', b'o', b'n', b'g']).await.unwrap();
+        let mut status = [0u8; 2];
+        client.read_exact(&mut status).await.unwrap();
+        assert_eq!(status, [0x01, 0x01], "server should reject bad credentials with a non-zero status");
+
+        // The server must close the connection after an auth failure.
+        let n = client.read(&mut [0u8; 1]).await.unwrap();
+        assert_eq!(n, 0, "server should close the connection after auth failure");
+    };
+
+    timeout(Duration::from_secs(5), body).await.expect("rejection flow should complete within 5s");
+}
+
+#[tokio::test]
+async fn socks5_rejects_client_not_offering_user_pass() {
+    let proxy_addr = spawn_proxy_with(Config {
+        username: Some("bob".to_owned()),
+        password: Some("s3cret".to_owned()),
+        ..proxy_config()
+    })
+    .await;
+
+    let body = async {
+        let mut client = TcpStream::connect(proxy_addr).await.unwrap();
+
+        // Client offers only NO_AUTH, but the proxy requires user/pass.
+        client.write_all(&[0x05, 0x01, 0x00]).await.unwrap();
+        let mut method = [0u8; 2];
+        client.read_exact(&mut method).await.unwrap();
+        assert_eq!(method, [0x05, 0xFF], "server should reply NO ACCEPTABLE METHODS");
+
+        let n = client.read(&mut [0u8; 1]).await.unwrap();
+        assert_eq!(n, 0, "server should close the connection after rejecting methods");
+    };
+
+    timeout(Duration::from_secs(5), body).await.expect("method-rejection flow should complete within 5s");
 }

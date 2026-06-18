@@ -11,7 +11,7 @@ A super basic SOCKS5 proxy, written in Rust on `tokio`.
 
 > Published on crates.io as [`rsocks`](https://crates.io/crates/rsocks) (and the binary is `rsocks`) — the `rusty_socks` name was already taken by an unrelated crate. The GitHub repo and Docker image stay `rusty_socks`.
 
-`rusty_socks` is a small, no-frills SOCKS5 (`CONNECT`) proxy: point a browser, an `ssh` `ProxyCommand`, or anything else SOCKS5-aware at it and it relays TCP to the requested destination. It adds a CIDR allow-list, a reset-on-activity idle timeout, and optional binding to specific network interfaces — and nothing else.
+`rusty_socks` is a small, no-frills SOCKS5 (`CONNECT`) proxy: point a browser, an `ssh` `ProxyCommand`, or anything else SOCKS5-aware at it and it relays TCP to the requested destination. It adds a CIDR allow-list, optional username/password authentication, a reset-on-activity idle timeout, and optional binding to specific network interfaces — and nothing else.
 
 ## Usage
 
@@ -42,6 +42,10 @@ Options:
           Idle timeout in milliseconds: a connection with no traffic in either direction for this long is closed. `0` disables the idle timeout entirely [env: RS_READ_TIMEOUT=] [default: 60000]
       --accept-cidr <ACCEPT_CIDR>
           CIDR of client addresses allowed to connect [env: RS_ACCEPT_CIDR=] [default: 0.0.0.0/0]
+      --username <USERNAME>
+          Username required for SOCKS5 username/password authentication (RFC 1929). Must be set together with `--password`; when both are unset, the proxy requires no auth [env: RS_USERNAME=]
+      --password <PASSWORD>
+          Password required for SOCKS5 username/password authentication (RFC 1929). Must be set together with `--username` [env: RS_PASSWORD=]
   -h, --help
           Print help
   -V, --version
@@ -58,8 +62,22 @@ Options:
 | `--buffer-size` | `RS_BUFFER_SIZE` | `2048` | Per-direction buffer size, in bytes. |
 | `--read-timeout` | `RS_READ_TIMEOUT` | `60000` | **Idle** timeout (ms); the clock resets on every byte, so only genuinely silent connections are reaped. `0` disables it. |
 | `--accept-cidr` | `RS_ACCEPT_CIDR` | `0.0.0.0/0` | CIDR of client addresses allowed to connect. |
+| `--username` | `RS_USERNAME` | _(none → no auth)_ | Username for SOCKS5 username/password auth. Set together with `--password`. |
+| `--password` | `RS_PASSWORD` | _(none → no auth)_ | Password for SOCKS5 username/password auth. Set together with `--username`. |
 
 Logging uses [`tracing`](https://docs.rs/tracing); set `RUST_LOG` to change the level (e.g. `RUST_LOG=rsocks=debug`).
+
+### Authentication
+
+By default the proxy requires no authentication — gate it with `--accept-cidr` (network-level) and/or username/password ([RFC 1929](https://datatracker.ietf.org/doc/html/rfc1929)). Setting **both** `--username` and `--password` turns on username/password auth; a client must then offer the user/pass method and present matching credentials, or the connection is refused. Setting only one of the two is a misconfiguration and the proxy refuses to start.
+
+```bash
+$ rsocks --username bob --password s3cret
+# or, keeping secrets out of argv / shell history:
+$ RS_USERNAME=bob RS_PASSWORD=s3cret rsocks
+```
+
+The two gates compose: a CIDR allow-list for the networks you control, plus credentials for clients whose source IP you can't pin (a roaming client behind unpredictable NAT). Credentials cross the wire in the clear, exactly as the SOCKS5 protocol specifies — run over a trusted network or an encrypted tunnel, not the open internet.
 
 ### As a browser proxy
 

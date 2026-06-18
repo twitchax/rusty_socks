@@ -1,6 +1,7 @@
 #![warn(rust_2018_idioms)]
 #![warn(clippy::all)]
 
+pub mod auth;
 pub mod buffer_pool;
 pub mod config;
 pub mod connection;
@@ -21,6 +22,9 @@ use crate::helpers::{Helpers, Res};
 pub async fn run(config: Config) -> Res<()> {
     let listen_ip = config.listen_ip()?;
 
+    // Validate the auth configuration up front so a half-configured proxy fails before binding.
+    let auth_enabled = config.credentials()?.is_some();
+
     info!("Version:      {}", env!("CARGO_PKG_VERSION"));
     info!("Listen IP:    {}", listen_ip);
     info!("Endpoint IP:  {}", config.endpoint_ip()?);
@@ -28,6 +32,7 @@ pub async fn run(config: Config) -> Res<()> {
     info!("Buffer Size:  {}", config.buffer_size);
     info!("Read Timeout: {}", config.read_timeout);
     info!("Accept CIDR:  {}", config.accept_cidr);
+    info!("Auth:         {}", if auth_enabled { "user/pass" } else { "none" });
 
     let listener = TcpListener::bind(format!("{}:{}", listen_ip, config.port)).await?;
     info!("Listening on tcp://{}:{} ...", listen_ip, config.port);
@@ -41,6 +46,7 @@ pub async fn serve(listener: TcpListener, config: Config) -> Res<()> {
     let endpoint_ip = config.endpoint_ip()?;
     let cidr = Helpers::parse_cidr(&config.accept_cidr)?;
     let cidr_is_trivial = cidr.is_trivial();
+    let credentials = config.credentials()?;
 
     // Create a buffer pool (doubled so that each half of the connection achieves the desired size).
     let mut pool = BufferPool::new(2 * config.buffer_size);
@@ -56,6 +62,6 @@ pub async fn serve(listener: TcpListener, config: Config) -> Res<()> {
             continue;
         }
 
-        Connection::from(stream, endpoint_ip.clone(), pool.lease(), config.read_timeout).handle();
+        Connection::from(stream, endpoint_ip.clone(), pool.lease(), config.read_timeout, credentials.clone()).handle();
     }
 }

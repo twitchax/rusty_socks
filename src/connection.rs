@@ -8,6 +8,7 @@ use std::net::{IpAddr, SocketAddr};
 use std::str::FromStr;
 use tracing::{debug, error, info, warn};
 
+use crate::auth::{self, Credentials};
 use crate::handshake::Handshake;
 use crate::helpers::{Helpers, IntoError, Res, Void};
 use crate::request::{Destination, Request};
@@ -21,16 +22,18 @@ pub struct Connection {
     endpoint_interface: String,
     buffer: Buffer,
     read_timeout: u64,
+    credentials: Option<Credentials>,
 }
 
 impl Connection {
-    pub fn from(client_socket: TcpStream, endpoint_interface: String, buffer: Buffer, read_timeout: u64) -> Self {
+    pub fn from(client_socket: TcpStream, endpoint_interface: String, buffer: Buffer, read_timeout: u64, credentials: Option<Credentials>) -> Self {
         Connection {
             id: Helpers::get_id(),
             client_socket,
             endpoint_interface,
             buffer,
             read_timeout,
+            credentials,
         }
     }
 
@@ -56,7 +59,7 @@ impl Connection {
 
         // Complete handshake.
 
-        let handshake = Connection::perform_handshake(&mut self.client_socket, buffer).await?;
+        let handshake = Connection::perform_handshake(&mut self.client_socket, buffer, self.credentials.as_ref()).await?;
         let methods_string = handshake.methods.into_iter().map(|m| m.to_string()).collect::<Vec<String>>().join(",");
 
         debug!("[{}]   Handshake:", self.id);
@@ -113,7 +116,7 @@ impl Connection {
         Ok(())
     }
 
-    async fn perform_handshake(client_socket: &mut TcpStream, buffer: &mut [u8]) -> Res<Handshake> {
+    async fn perform_handshake(client_socket: &mut TcpStream, buffer: &mut [u8], credentials: Option<&Credentials>) -> Res<Handshake> {
         let read = client_socket.read(buffer).await?;
 
         if read == 0 {
@@ -126,15 +129,54 @@ impl Connection {
             return "Bad SOCKS version.".into_error();
         }
 
+        // Choose an authentication method based on what the client offered and what we require.
+        let method = auth::select_method(&handshake.methods, credentials);
+
         // Reuse the buffer since we are borrowing it anyway.
 
         buffer[0] = 0x05; // VERSION.
-        buffer[1] = 0x00; // NO AUTH.
+        buffer[1] = method; // SELECTED METHOD.
 
         client_socket.write_all(&buffer[..2]).await?;
         client_socket.flush().await?;
 
+        match method {
+            auth::METHOD_NONE_ACCEPTABLE => return "Client offered no acceptable authentication method.".into_error(),
+            auth::METHOD_USER_PASS => {
+                // `select_method` only returns USER_PASS when credentials are configured.
+                let expected = credentials.expect("user/pass selected without configured credentials");
+                Connection::perform_user_pass_auth(client_socket, buffer, expected).await?;
+            }
+            _ => {}
+        }
+
         Ok(handshake)
+    }
+
+    /// Run the RFC 1929 username/password sub-negotiation against the configured `expected`
+    /// credentials. Replies `0x01 0x00` on success and `0x01 0x01` on failure, erroring out
+    /// (which closes the connection) when authentication does not succeed.
+    async fn perform_user_pass_auth(client_socket: &mut TcpStream, buffer: &mut [u8], expected: &Credentials) -> Void {
+        let read = client_socket.read(buffer).await?;
+
+        if read == 0 {
+            return "Read 0 bytes during authentication.".into_error();
+        }
+
+        let presented = Credentials::from_data(buffer)?;
+        let authenticated = presented == *expected;
+
+        buffer[0] = 0x01; // AUTH SUB-NEGOTIATION VERSION.
+        buffer[1] = u8::from(!authenticated); // STATUS: 0x00 success, 0x01 failure.
+
+        client_socket.write_all(&buffer[..2]).await?;
+        client_socket.flush().await?;
+
+        if !authenticated {
+            return "Authentication failed.".into_error();
+        }
+
+        Ok(())
     }
 
     async fn perform_request_negotiation(client_socket: &mut TcpStream, buffer: &mut [u8]) -> Res<Request> {

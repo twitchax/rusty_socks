@@ -1,6 +1,6 @@
 [package]
 name = "rsocks"
-version = "2.2.2"
+version = "2.3.0"
 authors = ["Aaron Roney <twitchax@gmail.com>"]
 edition = "2024"
 description = "A super basic SOCKS5 proxy."

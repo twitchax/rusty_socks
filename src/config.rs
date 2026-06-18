@@ -1,6 +1,7 @@
 use clap::Parser;
 
-use crate::helpers::{Helpers, Res};
+use crate::auth::Credentials;
+use crate::helpers::{Helpers, IntoError, Res};
 
 /// A super basic SOCKS5 proxy.
 ///
@@ -32,6 +33,16 @@ pub struct Config {
     /// CIDR of client addresses allowed to connect.
     #[arg(long, env = "RS_ACCEPT_CIDR", default_value = "0.0.0.0/0")]
     pub accept_cidr: String,
+
+    /// Username required for SOCKS5 username/password authentication (RFC 1929).
+    /// Must be set together with `--password`; when both are unset, the proxy requires no auth.
+    #[arg(long, env = "RS_USERNAME")]
+    pub username: Option<String>,
+
+    /// Password required for SOCKS5 username/password authentication (RFC 1929).
+    /// Must be set together with `--username`.
+    #[arg(long, env = "RS_PASSWORD")]
+    pub password: Option<String>,
 }
 
 impl Config {
@@ -49,6 +60,23 @@ impl Config {
         match interface {
             Some(name) => Ok(Helpers::get_interface_ip(name)?.to_string()),
             None => Ok("0.0.0.0".to_owned()),
+        }
+    }
+
+    /// Resolve the configured SOCKS5 credentials.
+    ///
+    /// Returns `Ok(None)` when authentication is disabled (neither flag set), `Ok(Some(_))`
+    /// when both are set, and an error when exactly one is set — that asymmetry almost always
+    /// means the operator thinks auth is on when it isn't, so we fail fast rather than silently
+    /// run open.
+    pub fn credentials(&self) -> Res<Option<Credentials>> {
+        match (&self.username, &self.password) {
+            (None, None) => Ok(None),
+            (Some(username), Some(password)) => Ok(Some(Credentials {
+                username: username.clone(),
+                password: password.clone(),
+            })),
+            _ => "Both --username and --password must be set together to enable authentication.".into_error(),
         }
     }
 }
@@ -74,5 +102,27 @@ mod tests {
 
         assert_eq!(config.listen_ip().unwrap(), "0.0.0.0");
         assert_eq!(config.endpoint_ip().unwrap(), "0.0.0.0");
+    }
+
+    #[test]
+    fn credentials_none_when_neither_flag_set() {
+        let config = Config::parse_from(["rsocks"]);
+
+        assert!(config.credentials().unwrap().is_none());
+    }
+
+    #[test]
+    fn credentials_some_when_both_flags_set() {
+        let config = Config::parse_from(["rsocks", "--username", "bob", "--password", "s3cret"]);
+        let creds = config.credentials().unwrap().unwrap();
+
+        assert_eq!(creds.username, "bob");
+        assert_eq!(creds.password, "s3cret");
+    }
+
+    #[test]
+    fn credentials_error_when_only_one_flag_set() {
+        assert!(Config::parse_from(["rsocks", "--username", "bob"]).credentials().is_err());
+        assert!(Config::parse_from(["rsocks", "--password", "s3cret"]).credentials().is_err());
     }
 }
