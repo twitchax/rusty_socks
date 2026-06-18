@@ -1,6 +1,6 @@
 [package]
 name = "rsocks"
-version = "2.2.0"
+version = "2.2.1"
 authors = ["Aaron Roney <twitchax@gmail.com>"]
 edition = "2024"
 description = "A super basic SOCKS5 proxy."
@@ -28,7 +28,7 @@ clap = { version = "4", features = ["derive", "env"] }
 tracing = { version = "0.1", features = ["log"] }
 tracing-subscriber = { version = "0.3", features = ["fmt", "ansi", "env-filter"] }
 rand = "0.10"
-pnet = "0.35"
+if-addrs = "0.15"
 futures = "0.3"
 phf = { version = "0.13", features = ["macros"] }
 

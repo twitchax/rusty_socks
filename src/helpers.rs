@@ -4,7 +4,7 @@ use std::error::Error;
 use std::fmt::Display;
 use std::{fmt::Formatter, net::SocketAddr};
 
-use pnet::datalink;
+use if_addrs::get_if_addrs;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use tokio::net::TcpSocket;
 
@@ -93,13 +93,9 @@ impl Helpers {
     }
 
     pub fn get_interface_ip(name: &str) -> Res<IpAddr> {
-        for iface in datalink::interfaces() {
+        for iface in get_if_addrs()? {
             if iface.name == name {
-                if iface.ips.is_empty() {
-                    return format!("Found interface `{}`, but could not find an assigned IP for that interface.", name).into_error();
-                }
-
-                return Ok(iface.ips[0].ip());
+                return Ok(iface.ip());
             }
         }
 
