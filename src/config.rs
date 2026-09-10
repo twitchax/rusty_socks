@@ -21,8 +21,9 @@ pub struct Config {
     #[arg(long, env = "RS_PORT", default_value_t = 1080)]
     pub port: u16,
 
-    /// Per-direction buffer size, in bytes.
-    #[arg(long, env = "RS_BUFFER_SIZE", default_value_t = 2048)]
+    /// Per-direction copy buffer, in bytes. One is allocated for each direction of every
+    /// connection, so this trades memory per connection against syscalls per byte.
+    #[arg(long, env = "RS_BUFFER_SIZE", default_value_t = 16 * 1024)]
     pub buffer_size: usize,
 
     /// Idle timeout in milliseconds: a connection with no traffic in either direction for this long

@@ -2,7 +2,6 @@
 #![warn(clippy::all)]
 
 pub mod auth;
-pub mod buffer_pool;
 pub mod config;
 pub mod connection;
 pub mod copy_pump;
@@ -10,10 +9,13 @@ pub mod handshake;
 pub mod helpers;
 pub mod request;
 
+use std::io::{Error, ErrorKind};
+use std::time::Duration;
+
 use tokio::net::TcpListener;
+use tokio::time::sleep;
 use tracing::{info, warn};
 
-use crate::buffer_pool::BufferPool;
 use crate::config::Config;
 use crate::connection::Connection;
 use crate::helpers::{Helpers, Res};
@@ -48,20 +50,78 @@ pub async fn serve(listener: TcpListener, config: Config) -> Res<()> {
     let cidr_is_trivial = cidr.is_trivial();
     let credentials = config.credentials()?;
 
-    // Create a buffer pool (doubled so that each half of the connection achieves the desired size).
-    let mut pool = BufferPool::new(2 * config.buffer_size);
-
     loop {
-        let (stream, _) = listener.accept().await?;
-        let remote_ip = stream.peer_addr()?.ip();
+        // Nothing that goes wrong with a single connection may take the listener down.
+        let (stream, _) = match listener.accept().await {
+            Ok(accepted) => accepted,
+            Err(error) => {
+                let backoff = accept_backoff(&error);
+                warn!("Accept failed ({}); retrying in {}ms.", error, backoff.as_millis());
+                sleep(backoff).await;
+                continue;
+            }
+        };
+
+        // A peer can vanish between `accept` and `peer_addr`, which is not fatal either.
+        let remote_ip = match stream.peer_addr() {
+            Ok(address) => address.ip(),
+            Err(error) => {
+                warn!("Could not read peer address ({}): dropping connection.", error);
+                continue;
+            }
+        };
 
         // Drop connections that do not match the accept CIDR.
-        if !cidr_is_trivial && !Helpers::is_ip_in_cidr(&remote_ip, &cidr)? {
-            warn!("Request from {} does not match {}: dropping connection.", remote_ip, config.accept_cidr);
-            drop(stream);
-            continue;
+        match Helpers::is_ip_in_cidr(&remote_ip, &cidr) {
+            Ok(true) => {}
+            Ok(false) if cidr_is_trivial => {}
+            Ok(false) => {
+                warn!("Request from {} does not match {}: dropping connection.", remote_ip, config.accept_cidr);
+                drop(stream);
+                continue;
+            }
+            Err(error) => {
+                warn!("Could not match {} against {} ({}): dropping connection.", remote_ip, config.accept_cidr, error);
+                drop(stream);
+                continue;
+            }
         }
 
-        Connection::from(stream, endpoint_ip.clone(), pool.lease(), config.read_timeout, credentials.clone()).handle();
+        Connection::from(stream, endpoint_ip.clone(), config.buffer_size, config.read_timeout, credentials.clone()).handle();
+    }
+}
+
+/// Pause before the next `accept` after `error`.
+///
+/// Errors that concern only the connection being accepted are safe to retry immediately: that
+/// connection is already gone and the listener is healthy. Everything else is a resource problem,
+/// and tokio does not clear readiness on a non-`WouldBlock` error, so an immediate retry re-enters
+/// the syscall and fails on the same queued connection: measured at roughly 765,000 failed accepts
+/// per second, against 10 with this backoff.
+fn accept_backoff(error: &Error) -> Duration {
+    match error.kind() {
+        ErrorKind::ConnectionRefused | ErrorKind::ConnectionAborted | ErrorKind::ConnectionReset => Duration::ZERO,
+        _ => ACCEPT_ERROR_BACKOFF,
+    }
+}
+
+/// How long to wait before accepting again after a resource error, such as running out of file
+/// descriptors.
+const ACCEPT_ERROR_BACKOFF: Duration = Duration::from_millis(100);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pretty_assertions::assert_eq;
+
+    #[test]
+    fn only_resource_errors_back_off() {
+        for kind in [ErrorKind::ConnectionRefused, ErrorKind::ConnectionAborted, ErrorKind::ConnectionReset] {
+            assert_eq!(accept_backoff(&Error::new(kind, "peer went away")), Duration::ZERO);
+        }
+
+        // EMFILE.
+        assert_eq!(accept_backoff(&Error::from_raw_os_error(24)), ACCEPT_ERROR_BACKOFF);
+        assert_eq!(accept_backoff(&Error::other("unknown")), ACCEPT_ERROR_BACKOFF);
     }
 }

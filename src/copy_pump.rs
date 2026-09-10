@@ -10,14 +10,16 @@ use crate::helpers::{IntoError, Res};
 pub struct CopyPump {
     client_socket: TcpStream,
     endpoint_socket: TcpStream,
+    buffer_size: usize,
     read_timeout: u64,
 }
 
 impl CopyPump {
-    pub fn from(client_socket: TcpStream, endpoint_socket: TcpStream, read_timeout: u64) -> Self {
+    pub fn from(client_socket: TcpStream, endpoint_socket: TcpStream, buffer_size: usize, read_timeout: u64) -> Self {
         CopyPump {
             client_socket,
             endpoint_socket,
+            buffer_size,
             read_timeout,
         }
     }
@@ -39,8 +41,8 @@ impl CopyPump {
             ms => Some(Duration::from_millis(ms)),
         };
 
-        let pump_up = Self::pump(&mut client_socket_read, &mut endpoint_socket_write, idle);
-        let pump_down = Self::pump(&mut endpoint_socket_read, &mut client_socket_write, idle);
+        let pump_up = Self::pump(&mut client_socket_read, &mut endpoint_socket_write, self.buffer_size, idle);
+        let pump_down = Self::pump(&mut endpoint_socket_read, &mut client_socket_write, self.buffer_size, idle);
 
         pin_mut!(pump_up);
         pin_mut!(pump_down);
@@ -55,12 +57,12 @@ impl CopyPump {
     /// Copy bytes from `from` to `to` until EOF, an I/O error, or — when `idle` is set — a window
     /// of `idle` with no data at all. Because each iteration arms a *fresh* timeout around a single
     /// read, any byte that arrives resets the clock; the timeout only trips on true silence.
-    async fn pump<R, W>(from: &mut R, to: &mut W, idle: Option<Duration>) -> Res<()>
+    async fn pump<R, W>(from: &mut R, to: &mut W, buffer_size: usize, idle: Option<Duration>) -> Res<()>
     where
         R: AsyncRead + Unpin,
         W: AsyncWrite + Unpin,
     {
-        let mut buffer = [0u8; 16 * 1024];
+        let mut buffer = vec![0u8; buffer_size];
 
         loop {
             let read = match idle {
@@ -85,6 +87,8 @@ impl CopyPump {
 #[cfg(test)]
 mod tests {
     use super::CopyPump;
+
+    const TEST_BUFFER_SIZE: usize = 16 * 1024;
     use std::time::Duration;
     use tokio::io::{AsyncReadExt, AsyncWriteExt, duplex};
     use tokio::time::{sleep, timeout};
@@ -123,7 +127,7 @@ mod tests {
             total
         };
 
-        let pump = CopyPump::pump(&mut from, &mut to, idle);
+        let pump = CopyPump::pump(&mut from, &mut to, TEST_BUFFER_SIZE, idle);
 
         // Run the pump and its driver concurrently on one task (a boxed-error `Result` isn't
         // `Send`, so it can't cross a `tokio::spawn` boundary — `join!` keeps it local).
@@ -143,7 +147,7 @@ mod tests {
         let (_src, mut from) = duplex(64); // hold the source open but never write to it
         let (mut to, _drain) = duplex(64);
 
-        let result = timeout(Duration::from_secs(2), CopyPump::pump(&mut from, &mut to, idle))
+        let result = timeout(Duration::from_secs(2), CopyPump::pump(&mut from, &mut to, TEST_BUFFER_SIZE, idle))
             .await
             .expect("pump should give up around the idle window, well before 2s");
 
@@ -158,8 +162,27 @@ mod tests {
 
         // With the timeout disabled the pump stays blocked on the read, so the *outer* bound is
         // what trips — i.e. the pump itself never returned.
-        let outcome = timeout(Duration::from_millis(300), CopyPump::pump(&mut from, &mut to, None)).await;
+        let outcome = timeout(Duration::from_millis(300), CopyPump::pump(&mut from, &mut to, TEST_BUFFER_SIZE, None)).await;
 
         assert!(outcome.is_err(), "with idle disabled the pump must keep waiting, not return");
+    }
+
+    // Pins the wiring rather than the size: a one-byte buffer still moves a larger payload, it
+    // just takes more reads to do it.
+    #[tokio::test]
+    async fn pump_honours_the_configured_buffer_size() {
+        let (mut from, mut writer) = duplex(64);
+        let (mut to, mut reader) = duplex(64);
+
+        let payload = b"twelve bytes";
+        writer.write_all(payload).await.unwrap();
+        drop(writer);
+
+        CopyPump::pump(&mut from, &mut to, 1, None).await.unwrap();
+        drop(to);
+
+        let mut received = Vec::new();
+        reader.read_to_end(&mut received).await.unwrap();
+        assert_eq!(received, payload);
     }
 }
