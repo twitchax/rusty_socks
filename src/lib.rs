@@ -94,18 +94,15 @@ pub async fn serve(listener: TcpListener, config: Config) -> Res<()> {
 /// Pause before the next `accept` after `error`.
 ///
 /// Errors that concern only the connection being accepted are safe to retry immediately: that
-/// connection is already gone and the listener is healthy. Everything else is treated as a resource
-/// problem, and those need a pause. Descriptor exhaustion in particular leaves the pending
-/// connection in the accept queue, and tokio does not clear readiness on a non-`WouldBlock` error,
-/// so an immediate retry re-enters the syscall and fails on the same connection: measured at
-/// roughly 765,000 failed accepts per second, against 10 with this backoff.
+/// connection is already gone and the listener is healthy. Everything else is a resource problem,
+/// and tokio does not clear readiness on a non-`WouldBlock` error, so an immediate retry re-enters
+/// the syscall and fails on the same queued connection: measured at roughly 765,000 failed accepts
+/// per second, against 10 with this backoff.
 fn accept_backoff(error: &Error) -> Duration {
-    if is_connection_error(error) { Duration::ZERO } else { ACCEPT_ERROR_BACKOFF }
-}
-
-/// Whether `error` concerns only the connection being accepted, rather than the listener.
-fn is_connection_error(error: &Error) -> bool {
-    matches!(error.kind(), ErrorKind::ConnectionRefused | ErrorKind::ConnectionAborted | ErrorKind::ConnectionReset)
+    match error.kind() {
+        ErrorKind::ConnectionRefused | ErrorKind::ConnectionAborted | ErrorKind::ConnectionReset => Duration::ZERO,
+        _ => ACCEPT_ERROR_BACKOFF,
+    }
 }
 
 /// How long to wait before accepting again after a resource error, such as running out of file
@@ -118,18 +115,13 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     #[test]
-    fn connection_errors_retry_immediately() {
+    fn only_resource_errors_back_off() {
         for kind in [ErrorKind::ConnectionRefused, ErrorKind::ConnectionAborted, ErrorKind::ConnectionReset] {
             assert_eq!(accept_backoff(&Error::new(kind, "peer went away")), Duration::ZERO);
         }
-    }
 
-    #[test]
-    fn resource_errors_back_off() {
         // EMFILE.
-        let emfile = Error::from_raw_os_error(24);
-        assert_eq!(accept_backoff(&emfile), ACCEPT_ERROR_BACKOFF);
-
+        assert_eq!(accept_backoff(&Error::from_raw_os_error(24)), ACCEPT_ERROR_BACKOFF);
         assert_eq!(accept_backoff(&Error::other("unknown")), ACCEPT_ERROR_BACKOFF);
     }
 }
