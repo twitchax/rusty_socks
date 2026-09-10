@@ -2,7 +2,6 @@
 #![warn(clippy::all)]
 
 pub mod auth;
-pub mod buffer_pool;
 pub mod config;
 pub mod connection;
 pub mod copy_pump;
@@ -17,7 +16,6 @@ use tokio::net::TcpListener;
 use tokio::time::sleep;
 use tracing::{info, warn};
 
-use crate::buffer_pool::BufferPool;
 use crate::config::Config;
 use crate::connection::Connection;
 use crate::helpers::{Helpers, Res};
@@ -51,9 +49,6 @@ pub async fn serve(listener: TcpListener, config: Config) -> Res<()> {
     let cidr = Helpers::parse_cidr(&config.accept_cidr)?;
     let cidr_is_trivial = cidr.is_trivial();
     let credentials = config.credentials()?;
-
-    // Create a buffer pool (doubled so that each half of the connection achieves the desired size).
-    let mut pool = BufferPool::new(2 * config.buffer_size);
 
     loop {
         // Nothing that goes wrong with a single connection may take the listener down. Descriptor
@@ -94,7 +89,7 @@ pub async fn serve(listener: TcpListener, config: Config) -> Res<()> {
             }
         }
 
-        Connection::from(stream, endpoint_ip.clone(), pool.lease(), config.read_timeout, credentials.clone()).handle();
+        Connection::from(stream, endpoint_ip.clone(), config.buffer_size, config.read_timeout, credentials.clone()).handle();
     }
 }
 

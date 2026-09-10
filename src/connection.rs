@@ -9,29 +9,34 @@ use std::str::FromStr;
 use tracing::{debug, error, info, warn};
 
 use crate::auth::{self, Credentials};
+use crate::copy_pump::CopyPump;
 use crate::handshake::Handshake;
 use crate::helpers::{Helpers, IntoError, Res, Void};
 use crate::request::{Destination, Request};
-//use crate::custom_pump::CustomPump;
-use crate::buffer_pool::Buffer;
-use crate::copy_pump::CopyPump;
+
+/// Size of the per-connection negotiation buffer.
+///
+/// SOCKS5 bounds every pre-pump message: the greeting is at most 257 bytes, the request 262, the
+/// reply 22, and the RFC 1929 user/pass exchange 513. One kilobyte covers all of them with room to
+/// spare, and it costs nothing because it lives on the stack for the length of the negotiation.
+const NEGOTIATION_BUFFER_SIZE: usize = 1024;
 
 pub struct Connection {
     id: String,
     client_socket: TcpStream,
     endpoint_interface: String,
-    buffer: Buffer,
+    buffer_size: usize,
     read_timeout: u64,
     credentials: Option<Credentials>,
 }
 
 impl Connection {
-    pub fn from(client_socket: TcpStream, endpoint_interface: String, buffer: Buffer, read_timeout: u64, credentials: Option<Credentials>) -> Self {
+    pub fn from(client_socket: TcpStream, endpoint_interface: String, buffer_size: usize, read_timeout: u64, credentials: Option<Credentials>) -> Self {
         Connection {
             id: Helpers::get_id(),
             client_socket,
             endpoint_interface,
-            buffer,
+            buffer_size,
             read_timeout,
             credentials,
         }
@@ -54,8 +59,11 @@ impl Connection {
     }
 
     async fn handle_task(mut self) -> Void {
-        // Get a &mut slice from the leased buffer.
-        let buffer = &mut self.buffer.get().await[..];
+        // Negotiation only. Every message SOCKS5 exchanges before the pump starts is bounded by
+        // the protocol, and the largest is the RFC 1929 user/pass request at 513 bytes (1 + 1 + 255
+        // + 1 + 255), so this cannot overflow. The data path sizes its own buffers from
+        // `buffer_size`; the two are unrelated.
+        let buffer = &mut [0u8; NEGOTIATION_BUFFER_SIZE][..];
 
         // Complete handshake.
 
@@ -103,8 +111,7 @@ impl Connection {
 
         // Run the pump (all errors in pumps are emitted as log messages and should not disrupt the execution flow).
 
-        //CustomPump::from(&self.id, self.client_socket, endpoint_socket, buffer, self.read_timeout).start().await;
-        match CopyPump::from(self.client_socket, endpoint_socket, self.read_timeout).start().await {
+        match CopyPump::from(self.client_socket, endpoint_socket, self.buffer_size, self.read_timeout).start().await {
             Ok(_) => {}
             Err(e) => {
                 warn!("[{}] The pump ended with an error.  {}", self.id, e);
