@@ -17,8 +17,7 @@ use crate::request::{Destination, Request};
 /// Size of the per-connection negotiation buffer.
 ///
 /// SOCKS5 bounds every pre-pump message: the greeting is at most 257 bytes, the request 262, the
-/// reply 22, and the RFC 1929 user/pass exchange 513. One kilobyte covers all of them with room to
-/// spare, and it costs nothing because it lives on the stack for the length of the negotiation.
+/// reply 22, and the RFC 1929 user/pass exchange 513. A kilobyte covers all of them.
 const NEGOTIATION_BUFFER_SIZE: usize = 1024;
 
 pub struct Connection {
@@ -59,10 +58,6 @@ impl Connection {
     }
 
     async fn handle_task(mut self) -> Void {
-        // Negotiation only. Every message SOCKS5 exchanges before the pump starts is bounded by
-        // the protocol, and the largest is the RFC 1929 user/pass request at 513 bytes (1 + 1 + 255
-        // + 1 + 255), so this cannot overflow. The data path sizes its own buffers from
-        // `buffer_size`; the two are unrelated.
         let buffer = &mut [0u8; NEGOTIATION_BUFFER_SIZE][..];
 
         // Complete handshake.

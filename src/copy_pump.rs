@@ -62,9 +62,6 @@ impl CopyPump {
         R: AsyncRead + Unpin,
         W: AsyncWrite + Unpin,
     {
-        // One buffer per direction, which is what `--buffer-size` has always claimed to configure.
-        // It was a hard-coded 16 KiB until this was wired up, so the flag documented a knob that
-        // did nothing.
         let mut buffer = vec![0u8; buffer_size];
 
         loop {
@@ -170,9 +167,8 @@ mod tests {
         assert!(outcome.is_err(), "with idle disabled the pump must keep waiting, not return");
     }
 
-    // `--buffer-size` was documented as the per-direction buffer but the pump used a hard-coded
-    // 16 KiB, so the flag configured nothing. This pins the wiring: a one-byte buffer still moves
-    // a larger payload, it just takes more reads to do it.
+    // Pins the wiring rather than the size: a one-byte buffer still moves a larger payload, it
+    // just takes more reads to do it.
     #[tokio::test]
     async fn pump_honours_the_configured_buffer_size() {
         let (mut from, mut writer) = duplex(64);

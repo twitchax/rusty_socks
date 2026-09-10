@@ -51,9 +51,7 @@ pub async fn serve(listener: TcpListener, config: Config) -> Res<()> {
     let credentials = config.credentials()?;
 
     loop {
-        // Nothing that goes wrong with a single connection may take the listener down. Descriptor
-        // exhaustion is the case that used to kill the proxy outright: `accept` returns `EMFILE`,
-        // and propagating it ended `serve`.
+        // Nothing that goes wrong with a single connection may take the listener down.
         let (stream, _) = match listener.accept().await {
             Ok(accepted) => accepted,
             Err(error) => {
@@ -127,7 +125,7 @@ mod tests {
 
     #[test]
     fn resource_errors_back_off() {
-        // EMFILE, the case that used to end `serve`.
+        // EMFILE.
         let emfile = Error::from_raw_os_error(24);
         assert_eq!(accept_backoff(&emfile), ACCEPT_ERROR_BACKOFF);
 
